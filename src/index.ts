@@ -1,4 +1,7 @@
 import { Hono } from "hono";
+import { drizzle } from "drizzle-orm/d1";
+import { sweepInboxDoc } from "./intake/doc-sweep";
+import { createIntakeRoutes } from "./intake/webhook";
 
 export type Env = {
   DB: D1Database;
@@ -18,15 +21,23 @@ export type Env = {
 export const app = new Hono<{ Bindings: Env }>();
 
 app.get("/health", (c) => c.json({ ok: true }));
+app.route("/", createIntakeRoutes());
 
 export async function scheduled(
   controller: ScheduledController,
-  _env: Env,
+  env: Env,
   _ctx: ExecutionContext,
 ): Promise<void> {
   switch (controller.cron) {
     case "*/15 * * * *":
-      // Filled by later slices: inbox sweep, then drip enrichment queue.
+      // Inbox sweep now; the drip enrichment queue is added by a later slice.
+      try {
+        await sweepInboxDoc({ db: drizzle(env.DB), env });
+      } catch (e) {
+        // Only name and message are logged: neither carries secrets.
+        const err = e instanceof Error ? e : new Error(String(e));
+        console.error("inbox sweep failed", err.name, err.message);
+      }
       break;
     case "0 10 * * *":
       // Filled by later slices: Sheets backup and nightly grooming.
