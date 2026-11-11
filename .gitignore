@@ -12,3 +12,7 @@
 .spec/.vibe-checkpoint.json
 .harness-backup/
 # <<< harness <<<
+node_modules/
+.wrangler/
+.dev.vars
+dist/

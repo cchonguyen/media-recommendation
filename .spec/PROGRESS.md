@@ -6,7 +6,7 @@
 
 Plan approved by Charlie on 2026-11-11 (`.spec/SYSTEM_SPEC.md`). The scaffold slice is listed first and runs before the spikes because `main` is red until a `package.json` with quick checks exists.
 
-- [ ] **Slice 1: Scaffold and schema** [IN_PROGRESS] `[YELLOW][CORE / DATA]`: Worker entry with Hono, D1 binding, both cron triggers, Drizzle schema for all six tables, first migration, CI deploy workflow, quick checks | Target files: `package.json`, `package-lock.json`, `tsconfig.json`, `wrangler.jsonc`, `drizzle.config.ts`, `vitest.config.ts`, `.gitignore`, `.github/workflows/deploy.yml`, `src/index.ts`, `src/db/schema.ts`, `src/db/schema.test.ts`, `migrations/`
+- [x] **Slice 1: Scaffold and schema** `[YELLOW][CORE / DATA]`: Worker entry with Hono, D1 binding, both cron triggers, Drizzle schema for all six tables, first migration, CI deploy workflow, quick checks | Target files: `package.json`, `package-lock.json`, `tsconfig.json`, `wrangler.jsonc`, `drizzle.config.ts`, `vitest.config.ts`, `.gitignore`, `.github/workflows/deploy.yml`, `src/index.ts`, `src/db/schema.ts`, `src/db/schema.test.ts`, `migrations/`
 - [ ] **Slice 0: Spikes** `[GREEN][CORE / DATA]`: WebCrypto RS256 JWT signing benchmark, CPU benchmark of a 50-line parse and a 300-row serialise, written results | Target files: `spikes/`, `.spec/spikes/`
 - [ ] **Slice 2: Google and OAuth client** `[YELLOW][CORE / DATA]`: WebCrypto RS256 signer, `system_kv` token cache, Docs and Sheets REST wrapper, unit test | Target files: `src/google/`
 - [ ] **Slice 3: Unified intake** `[RED][CORE / DATA]`: `ingestRawLines()`, `intake_log` check, Gemini batch parser (25 lines), Stage 1 merge, `targetRevisionId` Doc clear, `POST /api/webhook/intake`, tests | Target files: `src/intake/`, `src/index.ts`
