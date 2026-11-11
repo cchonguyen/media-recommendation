@@ -136,7 +136,7 @@
     ".harness/templates/workflows/harness-issue-status.yml": "d8fef8dfa658fb0eb8721494019aafa71b34d50788dcab0489f1abc4deb0c89c",
     ".harness/templates/workflows/harness-labels.yml": "0db0ddb8813a5cbbcd503f2da569a5c889d2f61a85616052efc48a2ce79a9552",
     ".harness/templates/workflows/harness-main-watch.yml": "d1943094f59d77a6ce348796806e739ad1bee9b9e540573bba08c7a86e0d1bef",
-    ".harness/templates/workflows/harness-pr-check.yml": "75b0d7bd0d86b280847aaf131b1635f4a382cf4d8f551b89bcf62ce629d6a96c",
+    ".harness/templates/workflows/harness-pr-check.yml": "5a803cea93d103f2dda9a585d2f6e8e9c396a088b7198738d8b89e5060a89040",
     ".harness/templates/workflows/harness-referee-watch.yml": "685035756be9995959bad25c4c614a2e13c2ac38ab738ba79ee91a187c1c4900",
     ".harness/templates/workflows/harness-slice-gate.yml": "de750e0b75899eabc727456aacada3e55dfe5f5984a0360b840238fde40e4819",
     ".spec/EXTERNAL_AGENT_RULES.md": "2ad0ef335c744767d1f5ee4a6030adcb50d7911cdbe43a313f609ff945648379",
