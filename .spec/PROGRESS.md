@@ -4,7 +4,7 @@
 
 <!-- Add slices with /spec or /triage. Format: - [ ] **Slice N** `[GREEN|YELLOW|RED][UI / VISUAL|CORE / DATA]`: goal — Target files: `path`, `path` -->
 
-Plan approved by Charlie on 2026-11-11 (`.spec/SYSTEM_SPEC.md`). Slice 1 runs before Slice 0 because `main` is red until a `package.json` with quick checks exists.
+Plan approved by Charlie on 2026-11-11 (`.spec/SYSTEM_SPEC.md`). The scaffold slice is listed first and runs before the spikes because `main` is red until a `package.json` with quick checks exists.
 
 - [ ] **Slice 1: Scaffold and schema** [IN_PROGRESS] `[YELLOW][CORE / DATA]`: Worker entry with Hono, D1 binding, both cron triggers, Drizzle schema for all six tables, first migration, CI deploy workflow, quick checks | Target files: `package.json`, `package-lock.json`, `tsconfig.json`, `wrangler.jsonc`, `drizzle.config.ts`, `vitest.config.ts`, `.gitignore`, `.github/workflows/deploy.yml`, `src/index.ts`, `src/db/schema.ts`, `src/db/schema.test.ts`, `migrations/`
 - [ ] **Slice 0: Spikes** `[GREEN][CORE / DATA]`: WebCrypto RS256 JWT signing benchmark, CPU benchmark of a 50-line parse and a 300-row serialise, written results | Target files: `spikes/`, `.spec/spikes/`
