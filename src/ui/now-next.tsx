@@ -7,6 +7,7 @@ import type { MediaItem } from "../db/schema";
 import { isMediaType } from "../api/validate";
 import { Layout, loadStatusStrip } from "./layout";
 import { createLibraryRoutes } from "./library";
+import { createListsUiRoutes } from "./lists";
 
 const LIMIT = 100;
 
@@ -261,5 +262,6 @@ export function createUiRoutes(options: { now?: () => Date } = {}) {
   });
 
   ui.route("/", createLibraryRoutes(options));
+  ui.route("/", createListsUiRoutes(options));
   return ui;
 }

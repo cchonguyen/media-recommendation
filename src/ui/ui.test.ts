@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { Hono } from "hono";
 import { seed, setup } from "../intake/test-fixtures";
+import { curatedListItems, curatedLists } from "../db/schema";
 import { createUiRoutes } from "./now-next";
 
 const NOW = new Date("2026-07-10T12:00:00Z");
@@ -112,5 +113,50 @@ describe("Library UI", () => {
     expect(html).not.toContain("Alpha Movie");
     expect(await (await h.get("/library/completed?consumed_year=2024")).text()).not.toContain("Finished Book");
     expect(await (await h.get("/library/completed?type=Book")).text()).toContain("Finished Book");
+  });
+});
+
+describe("Lists UI", () => {
+  async function withList() {
+    const h = harness();
+    await seed(h.db, { id: "m1", title: "Item One", status: "Completed" });
+    await seed(h.db, { id: "m2", title: "Gone One", status: "Archived" });
+    await h.db.insert(curatedLists).values({ id: "lst_abc123", slug: "my-list", title: "<b>My List</b>", description: "d", isPublic: true, createdAt: "2026-01-01", updatedAt: "2026-01-01" });
+    await h.db.insert(curatedListItems).values([
+      { id: "l1", listId: "lst_abc123", mediaItemId: "m1", rank: 1, blurb: "nice", createdAt: "2026-01-01" },
+      { id: "l2", listId: "lst_abc123", mediaItemId: "m2", rank: 2, blurb: "hidden", createdAt: "2026-01-01" },
+    ]);
+    return h;
+  }
+
+  it("renders /lists with create form, draft box and rows", async () => {
+    const h = await withList();
+    const res = await h.get("/lists");
+    expect(res.status).toBe(200);
+    const html = await res.text();
+    for (const s of ["<h1>Lists</h1>", "Create List", "Draft List with AI", "Generate", 'data-action="list-create"', 'data-action="draft"', 'data-share-slug="my-list"', "Copy", "/lists/lst_abc123", "Delete"]) {
+      expect(html).toContain(s);
+    }
+    expect(html).not.toContain("<b>My List</b>");
+    expect(html).toContain("&lt;b&gt;My List&lt;/b&gt;");
+  });
+
+  it("renders the edit page without archived items, and 404s unknown ids", async () => {
+    const h = await withList();
+    const html = await (await h.get("/lists/lst_abc123")).text();
+    expect(html).toContain("Item One");
+    expect(html).toContain("nice");
+    expect(html).not.toContain("Gone One");
+    for (const s of ["Add items", 'data-action="list-save"', 'data-action="row-up"', "Delete list", 'data-action="pick"']) {
+      expect(html).toContain(s);
+    }
+    const nf = await h.get("/lists/lst_nope00");
+    expect(nf.status).toBe(404);
+    expect(await nf.text()).toContain("List not found");
+  });
+
+  it("renders an empty /lists", async () => {
+    const h = harness();
+    expect(await (await h.get("/lists")).text()).toContain("No lists yet");
   });
 });

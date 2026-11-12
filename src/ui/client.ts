@@ -107,5 +107,148 @@ export const CLIENT_SCRIPT = `
       done(call("POST", "/api/items", { title: String(fd.get("title") || ""), media_type: String(fd.get("media_type")) }), btn);
     }
   });
+  // ---- Lists (Slice 10). Row data is only ever set with textContent/value/setAttribute. ----
+  var MAX_ITEMS = 100;
+  function qs(sel, root) { return (root || document).querySelector(sel); }
+  function shareUrl(slug) { return window.location.origin + "/share/" + slug; }
+  Array.prototype.forEach.call(document.querySelectorAll("[data-share-slug]"), function (n) {
+    n.textContent = shareUrl(n.getAttribute("data-share-slug"));
+  });
+  function addItemRow(container, mediaId, title, blurb) {
+    var tpl = document.getElementById("item-tpl");
+    if (!tpl || !container) return false;
+    var rows = container.querySelectorAll("[data-media-id]");
+    if (rows.length >= MAX_ITEMS) { toast("A list holds at most " + MAX_ITEMS + " items."); return false; }
+    for (var i = 0; i < rows.length; i++) {
+      if (rows[i].getAttribute("data-media-id") === mediaId) { toast("Already in the list."); return false; }
+    }
+    var li = tpl.content.firstElementChild.cloneNode(true);
+    li.setAttribute("data-media-id", mediaId);
+    qs(".t", li).textContent = title;
+    qs("textarea", li).value = blurb || "";
+    container.appendChild(li);
+    renumber(container);
+    return true;
+  }
+  function renumber(container) {
+    Array.prototype.forEach.call(container.querySelectorAll("[data-media-id]"), function (li, i) {
+      qs(".rank", li).textContent = String(i + 1);
+    });
+    var empty = qs("[data-empty]", container.parentNode);
+    if (empty) empty.hidden = container.querySelectorAll("[data-media-id]").length > 0;
+  }
+  function collectItems(container) {
+    return Array.prototype.map.call(container.querySelectorAll("[data-media-id]"), function (li) {
+      return { media_item_id: li.getAttribute("data-media-id"), blurb: qs("textarea", li).value };
+    });
+  }
+  function flash(p, btn, after) {
+    if (btn) btn.disabled = true;
+    return p.then(function (r) {
+      if (btn) btn.disabled = false;
+      if (after) after(r);
+    }, function (e) {
+      if (btn) btn.disabled = false;
+      toast(e.message);
+    });
+  }
+  document.addEventListener("click", function (ev) {
+    var el = ev.target.closest ? ev.target.closest("[data-action]") : null;
+    if (!el || el.tagName === "FORM") return;
+    var a = el.getAttribute("data-action");
+    var id = el.getAttribute("data-id");
+    if (a === "list-public") {
+      var next = el.getAttribute("data-public") !== "true";
+      done(call("PATCH", "/api/lists/" + encodeURIComponent(id), { is_public: next }), el);
+    } else if (a === "list-delete") {
+      if (!window.confirm("Delete this list? Its items stay in your library.")) return;
+      flash(call("DELETE", "/api/lists/" + encodeURIComponent(id)), el, function () { location.href = "/lists"; });
+    } else if (a === "copy-share") {
+      var url = shareUrl(el.getAttribute("data-slug"));
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(url).then(function () { toast("Share link copied."); }, function () { toast(url); });
+      } else { toast(url); }
+    } else if (a === "row-up" || a === "row-down" || a === "row-remove") {
+      var li = el.closest("[data-media-id]");
+      var box = li && li.parentNode;
+      if (!li) return;
+      if (a === "row-up" && li.previousElementSibling) box.insertBefore(li, li.previousElementSibling);
+      else if (a === "row-down" && li.nextElementSibling) box.insertBefore(li.nextElementSibling, li);
+      else if (a === "row-remove") box.removeChild(li);
+      renumber(box);
+    } else if (a === "pick-add") {
+      var added = addItemRow(document.getElementById("list-items"), id, el.getAttribute("data-title") || "", "");
+      if (added) el.disabled = true;
+    } else if (a === "list-save") {
+      var lid = el.getAttribute("data-id");
+      flash(call("PUT", "/api/lists/" + encodeURIComponent(lid) + "/items", { items: collectItems(document.getElementById("list-items")) }), el, function () {
+        toast("Saved");
+      });
+    } else if (a === "draft-save") {
+      var box2 = document.getElementById("draft-items");
+      var body = {
+        title: document.getElementById("draft-title").value.trim(),
+        description: document.getElementById("draft-desc").value
+      };
+      if (!body.title) { toast("Give the draft a title."); return; }
+      var ft = document.getElementById("draft-filter").value;
+      if (ft) body.media_type_filter = ft;
+      var items = collectItems(box2);
+      flash(call("POST", "/api/lists", body).then(function (l) {
+        return call("PUT", "/api/lists/" + encodeURIComponent(l.id) + "/items", { items: items }).then(function () { return l; });
+      }), el, function (l) { location.href = "/lists/" + encodeURIComponent(l.id); });
+    }
+  });
+  document.addEventListener("submit", function (ev) {
+    var form = ev.target;
+    var a = form.getAttribute && form.getAttribute("data-action");
+    if (a !== "list-create" && a !== "list-meta" && a !== "draft" && a !== "pick") return;
+    ev.preventDefault();
+    var btn = form.querySelector("button[type=submit]");
+    var fd = new FormData(form);
+    var ft = String(fd.get("media_type") || "");
+    if (a === "list-create") {
+      var body = { title: String(fd.get("title") || "").trim(), description: String(fd.get("description") || "") };
+      if (ft) body.media_type_filter = ft;
+      flash(call("POST", "/api/lists", body), btn, function (l) { location.href = "/lists/" + encodeURIComponent(l.id); });
+    } else if (a === "list-meta") {
+      var id = form.getAttribute("data-id");
+      flash(call("PATCH", "/api/lists/" + encodeURIComponent(id), {
+        title: String(fd.get("title") || "").trim(),
+        description: String(fd.get("description") || ""),
+        media_type_filter: ft || null
+      }), btn, function () { toast("Saved"); });
+    } else if (a === "draft") {
+      var db = { prompt: String(fd.get("prompt") || "") };
+      if (ft) db.media_type = ft;
+      flash(call("POST", "/api/lists/draft", db), btn, function (d) {
+        document.getElementById("draft-title").value = d.title || "";
+        document.getElementById("draft-desc").value = d.description || "";
+        document.getElementById("draft-filter").value = ft;
+        var box = document.getElementById("draft-items");
+        box.textContent = "";
+        (d.items || []).forEach(function (it) { addItemRow(box, it.media_item_id, it.title, it.blurb); });
+        document.getElementById("draft-panel").hidden = false;
+        renumber(box);
+      });
+    } else if (a === "pick") {
+      var q = String(fd.get("q") || "").trim();
+      var out = document.getElementById("pick-results");
+      flash(call("GET", "/api/items?limit=20&sort=title&order=asc&q=" + encodeURIComponent(q)), btn, function (r) {
+        out.textContent = "";
+        var its = r.items || [];
+        if (its.length === 0) { out.textContent = "No matches."; return; }
+        its.forEach(function (it) {
+          var b = document.createElement("button");
+          b.type = "button";
+          b.setAttribute("data-action", "pick-add");
+          b.setAttribute("data-id", it.id);
+          b.setAttribute("data-title", it.title);
+          b.textContent = "+ " + it.title + " (" + it.mediaType + ")";
+          out.appendChild(b);
+        });
+      });
+    }
+  });
 })();
 `;
