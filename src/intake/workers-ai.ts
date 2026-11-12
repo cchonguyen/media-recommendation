@@ -4,6 +4,7 @@ import type { IntakeEnv } from "./types";
 
 export const WORKERS_AI_MODEL = "@cf/meta/llama-3.3-70b-instruct-fp8-fast";
 export const WORKERS_AI_TIMEOUT_MS = 15_000;
+export const AI_GATEWAY_ID = "default";
 
 const SYSTEM = "You extract media titles from a personal inbox into JSON. Lines that name a film, show, book, game or podcast always yield an item.";
 const PLAIN_JSON_HINT =
@@ -32,7 +33,7 @@ async function runOnce(
         response_format: responseFormat,
         temperature: 0,
         max_tokens: 4096,
-      }),
+      }, { gateway: { id: AI_GATEWAY_ID, skipCache: true } }),
       new Promise<never>((_, rej) => setTimeout(() => rej(new Error("timeout")), WORKERS_AI_TIMEOUT_MS)),
     ]);
   } catch (e) {
