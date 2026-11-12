@@ -68,6 +68,41 @@ export const CLIENT_SCRIPT = `
         el.disabled = false;
         toast(/Gemini|parser/i.test(e.message) ? e.message + " Your lines are safe in the Doc; try again in a minute." : e.message);
       });
+    } else if (a === "test-parse") {
+      if (el.disabled) return;
+      el.disabled = true;
+      toast("Reading the inbox with the parser... this can take up to a minute.", true);
+      call("POST", "/api/sweep/test-parse", undefined, 60000).then(function (r) {
+        el.disabled = false;
+        var out = document.getElementById("test-parse-result");
+        if (r.skipped === "no-inbox-doc") { toast("Inbox is not configured: add the INBOX_DOC_ID secret."); return; }
+        if (r.skipped === "nothing-to-do") { toast("The inbox is empty. Add a line under the header in the Doc first."); return; }
+        var ls = r.lines || [];
+        var ok = 0;
+        ls.forEach(function (l) { if (l.ok) ok++; });
+        toast("Test parse done.");
+        if (!out) return;
+        out.textContent = "";
+        var h = document.createElement("p");
+        h.textContent = "Parser would save " + ok + " of " + ls.length + " lines. Test only: nothing was saved and the Doc was not changed.";
+        out.appendChild(h);
+        ls.forEach(function (l) {
+          if (l.ok) return;
+          var p = document.createElement("p");
+          p.className = "bad";
+          p.textContent = "Could not read: " + l.line + " (" + (l.reason || "no parser could read this line") + ")";
+          out.appendChild(p);
+        });
+        if (r.diag) {
+          var d = document.createElement("p");
+          d.className = "meta";
+          d.textContent = r.diag;
+          out.appendChild(d);
+        }
+      }, function (e) {
+        el.disabled = false;
+        toast(e.message);
+      });
     } else if (a === "backup") {
       if (el.disabled) return;
       el.disabled = true;
@@ -146,6 +181,27 @@ export const CLIENT_SCRIPT = `
       done(call("POST", "/api/items", { title: String(fd.get("title") || ""), media_type: String(fd.get("media_type")) }), btn);
     }
   });
+  // ---- Last sweeps panel. Server text is only ever set with textContent. ----
+  (function () {
+    var box = document.getElementById("sweeps");
+    if (!box) return;
+    fetch("/api/sweeps").then(function (r) { return r.json(); }).then(function (j) {
+      var rows = (j && j.sweeps) || [];
+      if (!rows.length) { box.textContent = "No sweeps recorded yet."; return; }
+      rows.forEach(function (s) {
+        var d = document.createElement("div");
+        d.className = "row meta";
+        var when = new Date(s.startedAt);
+        var text = (isNaN(when.getTime()) ? String(s.startedAt) : when.toLocaleString()) +
+          " | " + s.trigger + " | " + s.outcome +
+          " | " + s.created + " created, " + s.merged + " merged, " + s.keptInDoc + " kept, " + s.rejected + " rejected";
+        var extra = s.error || s.diag;
+        if (extra) text += " | " + extra;
+        d.textContent = text;
+        box.appendChild(d);
+      });
+    }, function () { box.textContent = "Could not load the sweep history."; });
+  })();
   // ---- Lists (Slice 10). Row data is only ever set with textContent/value/setAttribute. ----
   var MAX_ITEMS = 100;
   function qs(sel, root) { return (root || document).querySelector(sel); }

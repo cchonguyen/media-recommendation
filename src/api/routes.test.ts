@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { Hono } from "hono";
-import { activityLog, mediaItems, systemKv } from "../db/schema";
+import { activityLog, mediaItems, sweepRuns, systemKv } from "../db/schema";
 import { GoogleApiError } from "../google/api";
 import { GeminiError } from "../intake/gemini";
 import { seed, setup } from "../intake/test-fixtures";
@@ -497,5 +497,41 @@ describe("sweep", () => {
     expect(r.status).toBe(500);
     expect(JSON.stringify(r.json)).not.toContain("SECRET");
     spy.mockRestore();
+  });
+});
+
+describe("sweeps ledger and test parse", () => {
+  it("GET /api/sweeps returns the newest 20 rows", async () => {
+    const h = harness();
+    const rows = Array.from({ length: 25 }, (_, i) => ({
+      startedAt: `2026-03-09T00:${String(i).padStart(2, "0")}:00Z`,
+      durationMs: 10,
+      trigger: "button" as const,
+      outcome: "ok" as const,
+    }));
+    await h.db.insert(sweepRuns).values(rows);
+    const r = await h.call("GET", "/api/sweeps");
+    expect(r.status).toBe(200);
+    expect(r.json.sweeps).toHaveLength(20);
+    expect(r.json.sweeps[0]).toMatchObject({ id: 25, startedAt: "2026-03-09T00:24:00Z", linesSeen: 0, keptInDoc: 0 });
+  });
+
+  it("POST /api/sweep/test-parse returns the injected result", async () => {
+    const result = { lines: [{ line: "Dune", ok: true, title: "Dune" }] };
+    const testParse = vi.fn().mockResolvedValue(result);
+    const h = harness({ testParse });
+    const r = await h.call("POST", "/api/sweep/test-parse");
+    expect(r.status).toBe(200);
+    expect(r.json).toEqual(result);
+    expect(testParse).toHaveBeenCalledTimes(1);
+  });
+
+  it("maps Google and Gemini errors to 502", async () => {
+    for (const make of [() => new GoogleApiError("docs", 500), () => new GeminiError("Gemini request failed", 429, "Quota")]) {
+      const h = harness({ testParse: async () => { throw make(); } });
+      const r = await h.call("POST", "/api/sweep/test-parse");
+      expect(r.status).toBe(502);
+      expect(r.json.error).toBe("test_parse_failed");
+    }
   });
 });

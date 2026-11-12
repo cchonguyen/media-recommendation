@@ -136,7 +136,17 @@ export function Layout(props: { active: string; status: StatusStrip; title?: str
               ))}
             </nav>
           </header>
-          <main>{props.children}</main>
+          <main>
+            {active === "now" ? (
+              <section aria-label="Last sweeps">
+                <h2>Last sweeps</h2>
+                <button type="button" data-action="test-parse">Test parse</button>{" "}
+                <div id="sweeps" />
+                <div id="test-parse-result" />
+              </section>
+            ) : null}
+            {props.children}
+          </main>
           <div id="toast" role="status" hidden />
           <script>{raw(CLIENT_SCRIPT)}</script>
         </body>

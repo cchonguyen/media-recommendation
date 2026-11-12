@@ -10,8 +10,10 @@ import type { Db } from "../google/token";
 import { GoogleApiError, SubrequestBudgetError } from "../google/api";
 import { GeminiError } from "../intake/gemini";
 import { sweepInboxDoc } from "../intake/doc-sweep";
-import { runLoggedSweep } from "../intake/sweep-ledger";
+import { lastSweepRuns, runLoggedSweep } from "../intake/sweep-ledger";
 import type { SweepDeps, SweepResult } from "../intake/doc-sweep";
+import { testParseInbox } from "../intake/test-parse";
+import type { TestParseResult } from "../intake/test-parse";
 import { pacificDayAndHour } from "../intake/pacific";
 import type { IntakeEnv } from "../intake/types";
 import { LAST_INBOX_SYNC_KEY, pacificYearOf, recordInboxSync } from "./time";
@@ -37,6 +39,7 @@ import type { MediaType, Tier } from "./validate";
 export interface ApiOptions {
   now?: () => Date;
   sweep?: (deps: SweepDeps) => Promise<SweepResult>;
+  testParse?: (deps: SweepDeps) => Promise<TestParseResult>;
 }
 
 type ApiEnv = IntakeEnv & { DB: D1Database };
@@ -153,6 +156,7 @@ function escapeLike(s: string): string {
 export function createApiRoutes(options: ApiOptions = {}) {
   const nowFn = options.now ?? (() => new Date());
   const sweep = options.sweep ?? sweepInboxDoc;
+  const testParse = options.testParse ?? testParseInbox;
   const routes = new Hono<{ Bindings: ApiEnv }>();
 
   routes.onError((err, c) => {
@@ -474,6 +478,24 @@ export function createApiRoutes(options: ApiOptions = {}) {
     }
     if (!("skipped" in result) || result.skipped !== "no-inbox-doc") await recordInboxSync(db, now);
     return c.json(result);
+  });
+
+  routes.get("/sweeps", async (c) => {
+    return c.json({ sweeps: await lastSweepRuns(drizzle(c.env.DB), 20) });
+  });
+
+  routes.post("/sweep/test-parse", async (c) => {
+    const db = drizzle(c.env.DB);
+    try {
+      return c.json(await testParse({ db, env: c.env, now: nowFn }));
+    } catch (e) {
+      if (e instanceof GeminiError) throw new ApiError(502, "test_parse_failed", `The text parser is unavailable (Gemini HTTP ${e.status}${e.detail ? `: ${e.detail}` : ""}).`);
+      if (e instanceof GoogleAuthError || e instanceof GoogleApiError) {
+        throw new ApiError(502, "test_parse_failed", "Google request failed.");
+      }
+      if (e instanceof SubrequestBudgetError) throw new ApiError(502, "test_parse_failed", "Test parse ran out of request budget.");
+      throw e;
+    }
   });
 
   return routes;

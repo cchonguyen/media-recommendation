@@ -179,6 +179,21 @@ describe("Lists UI", () => {
   });
 });
 
+describe("sweeps panel", () => {
+  it("shows Last sweeps and the Test parse button on the home page", async () => {
+    const html = await (await harness().get("/")).text();
+    expect(html).toContain("Last sweeps");
+    expect(html).toContain('data-action="test-parse"');
+    expect(html).toContain('id="sweeps"');
+  });
+
+  it("client script loads the ledger and says nothing was saved", () => {
+    expect(() => new Function(CLIENT_SCRIPT)).not.toThrow();
+    expect(CLIENT_SCRIPT).toContain("/api/sweeps");
+    expect(CLIENT_SCRIPT).toContain("nothing was saved");
+  });
+});
+
 describe("client script", () => {
   it("is valid JavaScript and gives plain-English sweep results", () => {
     expect(() => new Function(CLIENT_SCRIPT)).not.toThrow();
