@@ -46,6 +46,43 @@ export const CLIENT_SCRIPT = `
       }, function (e) { el.disabled = false; toast(e.message); });
     } else if (a === "backup") {
       toast("Backup is coming soon.");
+    } else if (a === "archive") {
+      if (!window.confirm("Archive this item? It will be hidden from the library.")) return;
+      done(call("DELETE", "/api/items/" + encodeURIComponent(id)), el);
+    }
+  });
+  function cellDone(p, el) {
+    el.disabled = true;
+    p.then(function () { el.disabled = false; toast("Saved"); }, function (e) {
+      el.disabled = false;
+      toast(e.message);
+      setTimeout(function () { location.reload(); }, 1500);
+    });
+  }
+  function itemUrl(id) { return "/api/items/" + encodeURIComponent(id); }
+  document.addEventListener("change", function (ev) {
+    var el = ev.target;
+    var a = el.getAttribute && el.getAttribute("data-action");
+    if (!a) return;
+    var id = el.getAttribute("data-id");
+    if (a === "set-status") {
+      done(call("POST", itemUrl(id) + "/status", { status: el.value }), el);
+    } else if (a === "set-type") {
+      done(call("PATCH", itemUrl(id), { media_type: el.value }), el);
+    } else if (a === "title") {
+      var t = el.value.trim();
+      if (!t) { toast("Title must not be empty."); location.reload(); return; }
+      cellDone(call("PATCH", itemUrl(id), { title: t }), el);
+    } else if (a === "notes") {
+      cellDone(call("PATCH", itemUrl(id), { personal_notes: el.value }), el);
+    } else if (a === "rating" || a === "tier") {
+      var cell = el.closest(".rating-cell");
+      var r = cell.querySelector("[data-action=rating]").value;
+      var tr = cell.querySelector("[data-action=tier]").value;
+      if (!r) { toast("Pick a rating first."); return; }
+      var body = { rating: Number(r) };
+      if (tr) body.tier = tr;
+      cellDone(call("POST", itemUrl(id) + "/rating", body), el);
     }
   });
   document.addEventListener("submit", function (ev) {

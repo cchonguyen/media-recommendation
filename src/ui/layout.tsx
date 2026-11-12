@@ -15,12 +15,12 @@ export interface StatusStrip {
 
 export const TABS: { label: string; href: string; key: string }[] = [
   { label: "Now & Next", href: "/", key: "now" },
-  { label: "Movies", href: "/library/movie", key: "movie" },
+  { label: "Movies", href: "/library/movies", key: "movies" },
   { label: "TV", href: "/library/tv", key: "tv" },
-  { label: "Books", href: "/library/book", key: "book" },
-  { label: "Games", href: "/library/game", key: "game" },
-  { label: "Podcasts", href: "/library/podcast", key: "podcast" },
-  { label: "One-Offs", href: "/library/one-off", key: "one-off" },
+  { label: "Books", href: "/library/books", key: "books" },
+  { label: "Games", href: "/library/games", key: "games" },
+  { label: "Podcasts", href: "/library/podcasts", key: "podcasts" },
+  { label: "One-Offs", href: "/library/one-offs", key: "one-offs" },
   { label: "Completed Archive", href: "/library/completed", key: "completed" },
   { label: "Lists", href: "/lists", key: "lists" },
 ];
@@ -52,7 +52,7 @@ header{background:var(--card);border-bottom:1px solid var(--line);padding:.6rem 
 nav{display:flex;gap:.25rem;overflow-x:auto;margin-top:.5rem}
 nav a{padding:.35rem .7rem;border-radius:999px;color:var(--fg);text-decoration:none;white-space:nowrap;font-size:.9rem}
 nav a[aria-current=page]{background:var(--accent);color:#fff}
-main{max-width:60rem;margin:0 auto;padding:1rem}
+main{max-width:90rem;margin:0 auto;padding:1rem}
 h1{font-size:1.3rem;margin:.2rem 0 1rem}
 h2{font-size:1.05rem;margin:1.6rem 0 .6rem;border-bottom:1px solid var(--line);padding-bottom:.25rem}
 .cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(16rem,1fr));gap:.75rem}
@@ -72,6 +72,12 @@ button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
 button:disabled,button[aria-disabled=true]{opacity:.5;cursor:not-allowed}
 form.inline,form.filters{display:flex;flex-wrap:wrap;gap:.4rem;align-items:center}
 form.rate{display:flex;flex-direction:column;gap:.4rem;width:100%}
+.tablewrap{overflow-x:auto;background:var(--card);border:1px solid var(--line);border-radius:.6rem;margin-top:.6rem}
+table.lib{border-collapse:collapse;width:100%;font-size:.88rem}
+table.lib th,table.lib td{padding:.35rem .5rem;border-bottom:1px solid var(--line);text-align:left;vertical-align:top;white-space:nowrap}
+table.lib th a{color:var(--fg);text-decoration:none}
+table.lib input[type=text]{width:12rem}
+.pager{display:flex;gap:1rem;align-items:center;margin-top:.6rem;font-size:.9rem}
 .empty{color:var(--muted);font-style:italic}
 .bad{color:var(--bad)}
 #toast{position:fixed;left:50%;bottom:1rem;transform:translateX(-50%);background:var(--fg);color:var(--bg);padding:.6rem 1rem;border-radius:.5rem;max-width:90vw;z-index:10}
