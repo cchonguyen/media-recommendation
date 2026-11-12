@@ -2,7 +2,7 @@ import { and, inArray, ne, sql } from "drizzle-orm";
 import { activityLog, intakeLog, mediaItems } from "../db/schema";
 import type { MediaItem } from "../db/schema";
 import { MAX_LINES_PER_RUN, hashLine } from "./lines";
-import { parseLinesWithGemini } from "./gemini";
+import { parseLines } from "./parse";
 import type { MediaType, ParsedItem } from "./gemini";
 import { pacificDayAndHour } from "./pacific";
 import type { IngestDeps } from "./types";
@@ -122,7 +122,7 @@ export async function ingestRawLines(
   if (fresh.length === 0) return empty();
 
   // A Gemini failure throws here, before anything is written.
-  const parsed = await parseLinesWithGemini({
+  const parsed = await parseLines({
     lines: fresh.map((f) => f.raw),
     env,
     fetchImpl: deps.fetchImpl,
