@@ -45,7 +45,22 @@ export const CLIENT_SCRIPT = `
         setTimeout(function () { location.reload(); }, 1200);
       }, function (e) { el.disabled = false; toast(e.message); });
     } else if (a === "backup") {
-      toast("Backup is coming soon.");
+      if (el.disabled) return;
+      el.disabled = true;
+      call("POST", "/api/backup").then(function (r) {
+        el.disabled = false;
+        var n = r.rows || {};
+        var t = r.truncated || {};
+        var capped = [];
+        if (t.library) capped.push("Library_Archive");
+        if (t.active) capped.push("Active_Queue");
+        if (t.lists) capped.push("Curated_Lists");
+        var msg = "Backup done: " + n.library + " archive, " + n.active + " queue, " + n.lists + " list rows.";
+        if (capped.length) msg += " Capped at 500 rows: " + capped.join(", ") + ".";
+        toast(msg);
+        var lb = document.getElementById("last-backup");
+        if (lb && r.lastBackupAt) lb.textContent = "Last backup: " + r.lastBackupAt.replace("T", " ").slice(0, 16) + " UTC";
+      }, function (e) { el.disabled = false; toast(e.message); });
     } else if (a === "archive") {
       if (!window.confirm("Archive this item? It will be hidden from the library.")) return;
       done(call("DELETE", "/api/items/" + encodeURIComponent(id)), el);
