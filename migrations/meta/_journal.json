@@ -8,6 +8,13 @@
       "when": 1794438418228,
       "tag": "0000_fresh_chronomancer",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1794511145368,
+      "tag": "0001_ancient_apocalypse",
+      "breakpoints": true
     }
   ]
 }

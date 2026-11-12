@@ -134,6 +134,27 @@ export const systemKv = sqliteTable("system_kv", {
   expiresAt: integer("expires_at").notNull(),
 });
 
+export const SWEEP_OUTCOMES = ["ok", "partial", "failed"] as const;
+
+/** One row per inbox sweep that had work or failed. Read from D1 to diagnose a sweep without Worker logs. */
+export const sweepRuns = sqliteTable("sweep_runs", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  startedAt: text("started_at").notNull(),
+  durationMs: integer("duration_ms").notNull(),
+  trigger: text("trigger", { enum: ["cron", "button"] }).notNull(),
+  outcome: text("outcome", { enum: SWEEP_OUTCOMES }).notNull(),
+  stage: text("stage"),
+  linesSeen: integer("lines_seen").notNull().default(0),
+  created: integer("created").notNull().default(0),
+  merged: integer("merged").notNull().default(0),
+  duplicates: integer("duplicates").notNull().default(0),
+  keptInDoc: integer("kept_in_doc").notNull().default(0),
+  rejected: integer("rejected").notNull().default(0),
+  cleared: integer("cleared", { mode: "boolean" }).notNull().default(false),
+  error: text("error"),
+  diag: text("diag"),
+});
+
 export const curatedLists = sqliteTable(
   "curated_lists",
   {
@@ -172,6 +193,8 @@ export type ActivityLogRow = typeof activityLog.$inferSelect;
 export type NewActivityLogRow = typeof activityLog.$inferInsert;
 export type IntakeLogRow = typeof intakeLog.$inferSelect;
 export type NewIntakeLogRow = typeof intakeLog.$inferInsert;
+export type SweepRun = typeof sweepRuns.$inferSelect;
+export type NewSweepRun = typeof sweepRuns.$inferInsert;
 export type SystemKvRow = typeof systemKv.$inferSelect;
 export type NewSystemKvRow = typeof systemKv.$inferInsert;
 export type CuratedList = typeof curatedLists.$inferSelect;
