@@ -182,7 +182,7 @@ describe("Lists UI", () => {
 describe("client script", () => {
   it("is valid JavaScript and gives plain-English sweep results", () => {
     expect(() => new Function(CLIENT_SCRIPT)).not.toThrow();
-    for (const text of ["Sweeping the inbox", "not configured", "The inbox is empty", "parser is busy", "already seen"]) {
+    for (const text of ["Sweeping the inbox", "not configured", "The inbox is empty", "already seen"]) {
       expect(CLIENT_SCRIPT).toContain(text);
     }
     expect(CLIENT_SCRIPT).not.toContain("Sweep done: ");

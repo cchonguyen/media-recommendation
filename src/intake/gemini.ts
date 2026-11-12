@@ -23,6 +23,8 @@ export class GeminiError extends Error {
   constructor(
     message: string,
     readonly status: number,
+    /** Gemini's own trimmed reason, safe to show to the operator. */
+    readonly detail: string = "",
   ) {
     super(message);
     this.name = "GeminiError";
@@ -169,6 +171,17 @@ export const GEMINI_RETRY_DELAYS_MS = [1000, 2000];
 /** Gemini once held a request for two minutes before answering 503. */
 export const GEMINI_ATTEMPT_TIMEOUT_MS = 25_000;
 
+/** Gemini's own reason, trimmed. Never includes the key: the key travels in a header, not the body. */
+export async function readErrorDetail(res: Response): Promise<string> {
+  try {
+    const body = (await res.json()) as { error?: { message?: unknown } };
+    const m = body?.error?.message;
+    return typeof m === "string" ? m.replace(/\s+/g, " ").trim().slice(0, 200) : "";
+  } catch {
+    return "";
+  }
+}
+
 export async function parseLinesWithGemini(
   input: ParseInput,
 ): Promise<{ items: ParsedItem[]; rejected: number }> {
@@ -204,7 +217,10 @@ export async function parseLinesWithGemini(
     if (res.ok || !RETRYABLE.has(res.status) || last) break;
     await sleep(GEMINI_RETRY_DELAYS_MS[attempt]!);
   }
-  if (!res.ok) throw new GeminiError(`Gemini request failed: HTTP ${res.status}`, res.status);
+  if (!res.ok) {
+    const detail = await readErrorDetail(res);
+    throw new GeminiError(`Gemini request failed: HTTP ${res.status}${detail ? ` (${detail})` : ""}`, res.status, detail);
+  }
   let parsed: unknown;
   try {
     const payload = (await res.json()) as {

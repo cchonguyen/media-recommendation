@@ -59,7 +59,7 @@ export const CLIENT_SCRIPT = `
         if (reload) setTimeout(function () { location.reload(); }, 3500);
       }, function (e) {
         el.disabled = false;
-        toast(/Gemini|parser/i.test(e.message) ? "The AI parser is busy. Your lines are safe in the Doc; try again in a minute." : e.message);
+        toast(/Gemini|parser/i.test(e.message) ? e.message + " Your lines are safe in the Doc; try again in a minute." : e.message);
       });
     } else if (a === "backup") {
       if (el.disabled) return;
