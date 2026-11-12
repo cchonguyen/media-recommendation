@@ -102,6 +102,38 @@ describe("sweepInboxDoc", () => {
     expect(geminiCalls(s.f)).toHaveLength(1);
   });
 
+  it("leaves unreadable lines in the Doc and deletes only the saved ones", async () => {
+    const gemini: Parameters<typeof createFakeFetch>[0][string] = (call) => {
+      const prompt = JSON.parse(call.body ?? "{}").contents[0].parts[0].text as string;
+      const lines = prompt.split("Lines:\n")[1]!.split("\n").map((l) => l.replace(/^\d+: /, ""));
+      return geminiBody(lines.flatMap((l, i) => (l.startsWith("junk") ? [] : [item({ lineIndex: i, title: `T:${l}` })])));
+    };
+    const s = await sweepSetup([HEADER, "Dune", "junk one", "Alien", "junk two"], { gemini });
+    const r = await s.run();
+    expect(r).toMatchObject({ cleared: true, keptInDoc: 2, ingest: { created: 2, unparsedLines: ["junk one", "junk two"] } });
+    expect((await s.db.select().from(mediaItems)).map((x) => x.title).sort()).toEqual(["T:Alien", "T:Dune"]);
+    expect(await s.db.select().from(intakeLog)).toHaveLength(2);
+    const body = JSON.parse(batchCalls(s.f)[0]!.body!);
+    const c = s.doc._content;
+    // Highest range first: Alien, then Dune. Junk paragraphs are untouched.
+    expect(body.requests.map((q: { deleteContentRange: { range: unknown } }) => q.deleteContentRange.range)).toEqual([
+      { startIndex: c[3]!.startIndex, endIndex: c[3]!.endIndex },
+      { startIndex: c[1]!.startIndex, endIndex: c[1]!.endIndex },
+    ]);
+  });
+
+  it("sends no delete and keeps every line when nothing could be read", async () => {
+    const s = await sweepSetup([HEADER, "junk one", "junk two"], { gemini: () => geminiBody([]) });
+    const r = await s.run();
+    expect(r).toMatchObject({ cleared: false, keptInDoc: 2, ingest: { created: 0, accepted: 0 } });
+    expect(batchCalls(s.f)).toHaveLength(0);
+    expect(await s.db.select().from(mediaItems)).toHaveLength(0);
+    expect(await s.db.select().from(intakeLog)).toHaveLength(0);
+    // Next tick retries the same lines instead of skipping them as already seen.
+    await s.run();
+    expect(geminiCalls(s.f)).toHaveLength(2);
+  });
+
   it("sends no delete and rethrows when Gemini fails", async () => {
     const s = await sweepSetup([HEADER, "Dune"], { gemini: jsonResponse({}, 503) });
     await expect(s.run()).rejects.toMatchObject({ name: "GeminiError", status: 503 });
