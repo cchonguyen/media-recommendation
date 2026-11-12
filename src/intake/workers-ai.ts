@@ -3,23 +3,33 @@ import { buildPrompt, GeminiError, RESPONSE_SCHEMA, validateGeminiItems, type Pa
 import type { IntakeEnv } from "./types";
 
 export const WORKERS_AI_MODEL = "@cf/meta/llama-3.3-70b-instruct-fp8-fast";
-export const WORKERS_AI_TIMEOUT_MS = 20_000;
+export const WORKERS_AI_TIMEOUT_MS = 15_000;
 
-/** Same contract as parseLinesWithGemini. Failures throw GeminiError so callers handle one type. */
-export async function parseLinesWithWorkersAI(input: {
-  lines: string[];
-  env: IntakeEnv;
-  budget?: SubrequestBudget;
-}): Promise<{ items: ParsedItem[]; rejected: number; diag: string }> {
-  const ai = input.env.AI;
-  if (!ai) throw new GeminiError("Workers AI is not bound", 0);
+const SYSTEM = "You extract media titles from a personal inbox into JSON. Lines that name a film, show, book, game or podcast always yield an item.";
+const PLAIN_JSON_HINT =
+  'Return only JSON shaped as {"items":[{"lineIndex":0,"title":"","yearHint":null,"mediaType":"Movie","isAlreadyConsumed":false,"recommenderName":"Self","trustWeight":3,"myRating":null,"consumedYear":null,"personalNotes":"","alternativeMatchesNote":""}]}.';
+
+function isEmpty(parsed: unknown): boolean {
+  const list = Array.isArray(parsed) ? parsed : (parsed as { items?: unknown } | null)?.items;
+  return !Array.isArray(list) || list.length === 0;
+}
+
+async function runOnce(
+  ai: NonNullable<IntakeEnv["AI"]>,
+  input: { budget?: SubrequestBudget },
+  responseFormat: unknown,
+  prompt: string,
+): Promise<unknown> {
   input.budget?.take();
   let out: unknown;
   try {
     out = await Promise.race([
       ai.run(WORKERS_AI_MODEL, {
-        messages: [{ role: "user", content: buildPrompt(input.lines) }],
-        response_format: { type: "json_schema", json_schema: toJsonSchema() },
+        messages: [
+          { role: "system", content: SYSTEM },
+          { role: "user", content: prompt },
+        ],
+        response_format: responseFormat,
         temperature: 0,
         max_tokens: 4096,
       }),
@@ -39,6 +49,24 @@ export async function parseLinesWithWorkersAI(input: {
     }
   }
   if (!parsed || typeof parsed !== "object") throw new GeminiError("Workers AI returned no result", 502);
+  return parsed;
+}
+
+/** Same contract as parseLinesWithGemini. Failures throw GeminiError so callers handle one type. */
+export async function parseLinesWithWorkersAI(input: {
+  lines: string[];
+  env: IntakeEnv;
+  budget?: SubrequestBudget;
+}): Promise<{ items: ParsedItem[]; rejected: number; diag: string }> {
+  const ai = input.env.AI;
+  if (!ai) throw new GeminiError("Workers AI is not bound", 0);
+  const first = await runOnce(ai, input, { type: "json_schema", json_schema: toJsonSchema() }, buildPrompt(input.lines));
+  let parsed = first;
+  if (input.lines.length > 0 && isEmpty(first)) {
+    // Schema-constrained decoding can collapse to an empty list. Ask once more in plain JSON mode.
+    const retry = await runOnce(ai, input, { type: "json_object" }, `${buildPrompt(input.lines)}\n\n${PLAIN_JSON_HINT}`).catch(() => null);
+    if (retry && !isEmpty(retry)) parsed = retry;
+  }
   const result = validateGeminiItems(normalizeShape(parsed, input.lines.length), input.lines.length);
   const diag =
     `Workers AI returned ${result.items.length} usable items, ${result.rejected} rejected` +

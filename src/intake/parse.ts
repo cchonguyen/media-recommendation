@@ -1,4 +1,5 @@
 import { parseLinesWithGemini, GeminiError, type ParseInput, type ParsedItem } from "./gemini";
+import { parseStructuredLine } from "./structured";
 import { parseLinesWithWorkersAI } from "./workers-ai";
 
 /**
@@ -10,6 +11,8 @@ export interface ParseResult {
   rejected: number;
   /** One line on what the parsers did, for the operator and for system_kv. */
   diag?: string;
+  /** True when a model failed but template lines were still parsed. */
+  degraded?: boolean;
 }
 
 /** Gemini's error, with the Workers AI reason attached so one message names both failures. */
@@ -19,7 +22,7 @@ function withWorkersAi(e: unknown, waDiag: string): unknown {
   return new GeminiError(e.message, e.status, detail);
 }
 
-export async function parseLines(input: ParseInput): Promise<ParseResult> {
+async function parseWithModels(input: ParseInput): Promise<ParseResult> {
   if (!input.env.AI) return parseLinesWithGemini(input);
   let out: ParseResult;
   try {
@@ -41,5 +44,32 @@ export async function parseLines(input: ParseInput): Promise<ParseResult> {
     return await parseLinesWithGemini({ ...input, maxRetries: 0 });
   } catch (ge) {
     throw withWorkersAi(ge, out.diag ?? "");
+  }
+}
+
+/**
+ * Template lines are parsed locally and never reach a model. Only free-form lines do, and a model
+ * failure there does not discard the template lines: those are returned and the rest stay unparsed.
+ */
+export async function parseLines(input: ParseInput): Promise<ParseResult> {
+  const structured: ParsedItem[] = [];
+  const rest: { line: string; index: number }[] = [];
+  input.lines.forEach((line, index) => {
+    const it = parseStructuredLine(line, index);
+    if (it) structured.push(it);
+    else rest.push({ line, index });
+  });
+  if (structured.length === 0) return parseWithModels(input);
+  const note = `template parser read ${structured.length} of ${input.lines.length} lines`;
+  if (rest.length === 0) return { items: structured, rejected: 0, diag: note };
+  try {
+    const out = await parseWithModels({ ...input, lines: rest.map((r) => r.line) });
+    const mapped = out.items.map((it) => ({ ...it, lineIndex: rest[it.lineIndex]!.index }));
+    return { items: [...structured, ...mapped], rejected: out.rejected, diag: [note, out.diag].filter(Boolean).join("; ") };
+  } catch (e) {
+    if (!(e instanceof GeminiError)) throw e;
+    const why = `${e.message}${e.detail ? ` | ${e.detail}` : ""}`;
+    console.warn("Models failed for free-form lines:", why);
+    return { items: structured, rejected: 0, degraded: true, diag: `${note}; models FAILED for ${rest.length} free-form lines: ${why}` };
   }
 }
