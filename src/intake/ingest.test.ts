@@ -91,7 +91,7 @@ describe("ingestRawLines", () => {
     expect(f.calls).toHaveLength(1);
     expect(f.calls[0]!.headers["x-goog-api-key"]).toBe(GEMINI_KEY);
     expect(budget.used).toBe(1);
-    expect(res).toMatchObject({ accepted: 3, merged: 0, created: 3, skippedDuplicates: 0, rejected: 0, remaining: 0, unparsedLines: ["buy milk"] });
+    expect(res).toMatchObject({ accepted: 2, merged: 0, created: 3, skippedDuplicates: 0, rejected: 0, remaining: 0, unparsedLines: ["buy milk"] });
 
     const rows = await db.select().from(mediaItems);
     expect(rows).toHaveLength(3);
@@ -111,9 +111,9 @@ describe("ingestRawLines", () => {
     expect(log.every((l) => l.eventType === "CREATED" && l.dayOfWeekPt === 3 && l.hourOfDayPt === 12)).toBe(true);
     expect(log.map((l) => l.itemTitleSnapshot).sort()).toEqual(["Dune", "Hyperion", "Severance"]);
     const il = await db.select().from(intakeLog);
-    expect(il).toHaveLength(3);
+    expect(il).toHaveLength(2);
     expect(il.every((l) => l.source === "webhook")).toBe(true);
-    expect(il.find((l) => l.rawLine === "buy milk")).toBeTruthy();
+    expect(il.find((l) => l.rawLine === "buy milk")).toBeUndefined();
   });
 
   it("uses trust 5 from Gemini for Justin and passes it through", async () => {
@@ -243,14 +243,14 @@ describe("ingestRawLines", () => {
     expect(await db.select().from(intakeLog)).toHaveLength(0);
   });
 
-  it("logs and reports lines that yield no items", async () => {
+  it("reports lines that yield no items without logging them, so they can be retried", async () => {
     const { db } = setup();
     const f = geminiFetch(() => geminiBody([]));
     const res = await ingestRawLines(deps(db, f.fetchImpl), ["remember to call mom"], "gdoc");
-    expect(res).toMatchObject({ accepted: 1, created: 0, unparsedLines: ["remember to call mom"] });
-    expect((await db.select().from(intakeLog))[0]!.rawLine).toBe("remember to call mom");
+    expect(res).toMatchObject({ accepted: 0, created: 0, unparsedLines: ["remember to call mom"] });
+    expect(await db.select().from(intakeLog)).toHaveLength(0);
     await ingestRawLines(deps(db, f.fetchImpl), ["remember to call mom"], "gdoc");
-    expect(f.calls).toHaveLength(1);
+    expect(f.calls).toHaveLength(2);
   });
 
   it("counts rejected items", async () => {

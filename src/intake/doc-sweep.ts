@@ -1,4 +1,4 @@
-import { createSubrequestBudget, deleteContentRange, getDocument } from "../google/api";
+import { createSubrequestBudget, deleteContentRanges, getDocument } from "../google/api";
 import { getGoogleAccessToken } from "../google/token";
 import type { Db } from "../google/token";
 import { MAX_LINES_PER_RUN } from "./lines";
@@ -16,7 +16,7 @@ export interface SweepDeps {
 export type SweepResult =
   | { skipped: "no-inbox-doc" }
   | { skipped: "nothing-to-do"; remainingInDoc: 0 }
-  | { ingest: IngestResult; cleared: boolean; remainingInDoc: number };
+  | { ingest: IngestResult; cleared: boolean; remainingInDoc: number; keptInDoc: number };
 
 export async function sweepInboxDoc(deps: SweepDeps): Promise<SweepResult> {
   const docId = deps.env.INBOX_DOC_ID;
@@ -44,19 +44,38 @@ export async function sweepInboxDoc(deps: SweepDeps): Promise<SweepResult> {
     "gdoc",
   );
 
-  const startIndex = body[0]!.startIndex;
+  // Lines the parser could not read stay in the Doc and are not logged in intake_log, so nothing is lost.
+  const keep = new Set(ingest.unparsedLines.map((l) => l.trim()));
+  const taken = new Set<unknown>(takenParas);
+  const lastTaken = takenParas[takenParas.length - 1]!;
+  const scope = capped ? body.slice(0, body.indexOf(lastTaken) + 1) : body;
+  const ranges: { startIndex: number; endIndex: number }[] = [];
+  let run: { startIndex: number; endIndex: number } | null = null;
+  for (const p of scope) {
+    const kept = taken.has(p) && keep.has(p.text.trim());
+    if (kept) {
+      if (run) ranges.push(run);
+      run = null;
+    } else if (run) {
+      run.endIndex = p.endIndex;
+    } else {
+      run = { startIndex: p.startIndex, endIndex: p.endIndex };
+    }
+  }
+  if (run) ranges.push(run);
   // The final newline of a Doc can never be deleted.
-  const endIndex = capped ? takenParas[takenParas.length - 1]!.endIndex : doc.endIndex - 1;
+  const docEnd = doc.endIndex - 1;
+  const clean = ranges
+    .map((r) => ({ startIndex: r.startIndex, endIndex: Math.min(r.endIndex, docEnd) }))
+    .filter((r) => r.endIndex > r.startIndex);
   const remainingInDoc = candidates.length - takenParas.length;
 
   let cleared = false;
-  if (endIndex > startIndex) {
-    const res = await deleteContentRange(
-      docId,
-      { startIndex, endIndex, targetRevisionId: doc.revisionId },
-      opts,
-    );
+  if (clean.length > 0) {
+    const res = await deleteContentRanges(docId, clean, doc.revisionId, opts);
     cleared = res.ok;
+  } else {
+    cleared = keep.size === 0;
   }
-  return { ingest, cleared, remainingInDoc };
+  return { ingest, cleared, remainingInDoc, keptInDoc: ingest.unparsedLines.length };
 }

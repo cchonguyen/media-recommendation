@@ -265,8 +265,15 @@ export async function ingestRawLines(
     outItems.push({ id, title: g.title, mediaType: g.mediaType, status, merged: false });
   }
 
+  // Unparsed lines are not logged: they stay in the Doc and are retried, never silently consumed.
+  const unparsedSet = new Set(unparsedLines);
   for (const f of fresh) {
+    if (unparsedSet.has(f.raw)) continue;
     stmts.push(db.insert(intakeLog).values({ lineHash: f.hash, rawLine: f.raw, source, createdAt: nowIso }));
+  }
+
+  if (stmts.length === 0) {
+    return { ...empty(), unparsedLines, rejected: parsed.rejected };
   }
 
   try {
@@ -277,15 +284,15 @@ export async function ingestRawLines(
     const now2 = await db
       .select({ hash: intakeLog.lineHash })
       .from(intakeLog)
-      .where(inArray(intakeLog.lineHash, fresh.map((f) => f.hash)));
-    if (now2.length === fresh.length) {
+      .where(inArray(intakeLog.lineHash, fresh.filter((f) => !unparsedSet.has(f.raw)).map((f) => f.hash)));
+    if (now2.length === fresh.length - unparsedLines.length) {
       return { ...empty(), skippedDuplicates: skippedDuplicates + fresh.length };
     }
     throw err;
   }
 
   return {
-    accepted: fresh.length,
+    accepted: fresh.length - unparsedLines.length,
     merged,
     created,
     skippedDuplicates,

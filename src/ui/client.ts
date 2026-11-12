@@ -50,7 +50,7 @@ export const CLIENT_SCRIPT = `
         else if (r.ingest) {
           var g = r.ingest;
           msg = g.created + " new, " + g.merged + " merged, " + g.skippedDuplicates + " already seen";
-          if (g.unparsedLines && g.unparsedLines.length) msg += ", " + g.unparsedLines.length + " could not be read";
+          if (g.unparsedLines && g.unparsedLines.length) msg += ", " + g.unparsedLines.length + " could not be read and were left in the Doc";
           if (r.cleared === false) msg += ". The Doc could not be cleared; it will retry in 15 minutes.";
           reload = true;
         } else { msg = "Sweep finished."; }

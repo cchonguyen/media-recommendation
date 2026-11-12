@@ -126,14 +126,29 @@ export async function deleteContentRange(
   range: { startIndex: number; endIndex: number; targetRevisionId: string },
   opts: ApiOpts,
 ): Promise<DeleteResult> {
+  return deleteContentRanges(
+    docId,
+    [{ startIndex: range.startIndex, endIndex: range.endIndex }],
+    range.targetRevisionId,
+    opts,
+  );
+}
+
+/** Deletes several ranges in one batchUpdate, highest first so earlier indexes stay valid. */
+export async function deleteContentRanges(
+  docId: string,
+  ranges: { startIndex: number; endIndex: number }[],
+  targetRevisionId: string,
+  opts: ApiOpts,
+): Promise<DeleteResult> {
+  const requests = [...ranges]
+    .sort((a, b) => b.startIndex - a.startIndex)
+    .map((r) => ({ deleteContentRange: { range: { startIndex: r.startIndex, endIndex: r.endIndex } } }));
   try {
     await googleRequest(
       "POST",
       `${DOCS}/${encodeURIComponent(docId)}:batchUpdate`,
-      {
-        requests: [{ deleteContentRange: { range: { startIndex: range.startIndex, endIndex: range.endIndex } } }],
-        writeControl: { targetRevisionId: range.targetRevisionId },
-      },
+      { requests, writeControl: { targetRevisionId } },
       opts,
     );
     return { ok: true };
