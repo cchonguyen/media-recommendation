@@ -3,6 +3,8 @@ import { drizzle } from "drizzle-orm/d1";
 import { sweepInboxDoc } from "./intake/doc-sweep";
 import { createIntakeRoutes } from "./intake/webhook";
 import { runEnrichmentQueue } from "./enrichment/queue";
+import { createApiRoutes } from "./api/routes";
+import { recordInboxSync } from "./api/time";
 
 export type Env = {
   DB: D1Database;
@@ -23,6 +25,7 @@ export const app = new Hono<{ Bindings: Env }>();
 
 app.get("/health", (c) => c.json({ ok: true }));
 app.route("/", createIntakeRoutes());
+app.route("/api", createApiRoutes());
 
 export async function scheduled(
   controller: ScheduledController,
@@ -33,7 +36,9 @@ export async function scheduled(
     case "*/15 * * * *":
       // Inbox sweep, then the drip enrichment queue. Each has its own try/catch.
       try {
-        await sweepInboxDoc({ db: drizzle(env.DB), env });
+        const db = drizzle(env.DB);
+        const swept = await sweepInboxDoc({ db, env });
+        if (!("skipped" in swept) || swept.skipped !== "no-inbox-doc") await recordInboxSync(db, new Date());
       } catch (e) {
         // Only name and message are logged: neither carries secrets.
         const err = e instanceof Error ? e : new Error(String(e));
