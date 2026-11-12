@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { drizzle } from "drizzle-orm/d1";
 import { sweepInboxDoc } from "./intake/doc-sweep";
 import { createIntakeRoutes } from "./intake/webhook";
+import { runEnrichmentQueue } from "./enrichment/queue";
 
 export type Env = {
   DB: D1Database;
@@ -30,13 +31,19 @@ export async function scheduled(
 ): Promise<void> {
   switch (controller.cron) {
     case "*/15 * * * *":
-      // Inbox sweep now; the drip enrichment queue is added by a later slice.
+      // Inbox sweep, then the drip enrichment queue. Each has its own try/catch.
       try {
         await sweepInboxDoc({ db: drizzle(env.DB), env });
       } catch (e) {
         // Only name and message are logged: neither carries secrets.
         const err = e instanceof Error ? e : new Error(String(e));
         console.error("inbox sweep failed", err.name, err.message);
+      }
+      try {
+        await runEnrichmentQueue({ db: drizzle(env.DB), env });
+      } catch (e) {
+        const err = e instanceof Error ? e : new Error(String(e));
+        console.error("enrichment queue failed", err.name, err.message);
       }
       break;
     case "0 10 * * *":
