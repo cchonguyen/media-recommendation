@@ -160,17 +160,23 @@ export interface ParseInput {
   env: IntakeEnv;
   fetchImpl?: typeof fetch;
   budget?: SubrequestBudget;
+  /** Pause between retries. Injected by tests so they do not wait. */
+  sleep?: (ms: number) => Promise<void>;
 }
+
+const RETRYABLE = new Set([429, 500, 502, 503, 504]);
+export const GEMINI_RETRY_DELAYS_MS = [1000, 2000];
+/** Gemini once held a request for two minutes before answering 503. */
+export const GEMINI_ATTEMPT_TIMEOUT_MS = 25_000;
 
 export async function parseLinesWithGemini(
   input: ParseInput,
 ): Promise<{ items: ParsedItem[]; rejected: number }> {
   const key = input.env.GEMINI_API_KEY;
   if (!key) throw new GeminiError("Missing GEMINI_API_KEY", 0);
-  input.budget?.take();
   const model = input.env.GEMINI_MODEL ?? "gemini-flash-latest";
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`;
-  const res = await (input.fetchImpl ?? fetch)(url, {
+  const init = {
     method: "POST",
     headers: { "content-type": "application/json", "x-goog-api-key": key },
     body: JSON.stringify({
@@ -181,7 +187,23 @@ export async function parseLinesWithGemini(
         temperature: 0,
       },
     }),
-  });
+  };
+  const sleep = input.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
+  let res: Response | undefined;
+  for (let attempt = 0; ; attempt++) {
+    input.budget?.take();
+    const last = attempt >= GEMINI_RETRY_DELAYS_MS.length;
+    try {
+      res = await (input.fetchImpl ?? fetch)(url, { ...init, signal: AbortSignal.timeout(GEMINI_ATTEMPT_TIMEOUT_MS) });
+    } catch (e) {
+      // A hung or dropped connection counts as a busy response. The key is never in the error.
+      if (last) throw new GeminiError("Gemini request timed out or failed", 504);
+      await sleep(GEMINI_RETRY_DELAYS_MS[attempt]!);
+      continue;
+    }
+    if (res.ok || !RETRYABLE.has(res.status) || last) break;
+    await sleep(GEMINI_RETRY_DELAYS_MS[attempt]!);
+  }
   if (!res.ok) throw new GeminiError(`Gemini request failed: HTTP ${res.status}`, res.status);
   let parsed: unknown;
   try {

@@ -5,7 +5,7 @@ import { createSubrequestBudget } from "../google/api";
 import { jsonResponse } from "../google/test-helpers";
 import { MAX_LINES_PER_RUN, hashLine, normalizeLine, splitLines } from "./lines";
 import { pacificDayAndHour } from "./pacific";
-import { GeminiError, validateGeminiItems } from "./gemini";
+import { GEMINI_RETRY_DELAYS_MS, GeminiError, parseLinesWithGemini, validateGeminiItems } from "./gemini";
 import { ingestRawLines, unionNames } from "./ingest";
 import { FIXED_NOW, GEMINI_KEY, echoGemini, geminiBody, geminiFetch, item, seed, setup } from "./test-fixtures";
 
@@ -274,5 +274,75 @@ describe("ingestRawLines", () => {
     expect(await db.select().from(intakeLog)).toHaveLength(1);
     expect(await db.select().from(activityLog)).toHaveLength(1);
     expect([a.created, b.created].sort()).toEqual([0, 1]);
+  });
+});
+
+describe("Gemini retries", () => {
+  function sequence(statuses: number[]) {
+    let i = 0;
+    const calls: number[] = [];
+    const fetchImpl = (async () => {
+      const status = statuses[Math.min(i++, statuses.length - 1)]!;
+      calls.push(status);
+      return status === 200 ? geminiBody([item()]) : jsonResponse({ error: "busy" }, status);
+    }) as typeof fetch;
+    return { fetchImpl, calls };
+  }
+
+  it("retries a 503 and succeeds, pausing between attempts", async () => {
+    const { fetchImpl, calls } = sequence([503, 503, 200]);
+    const pauses: number[] = [];
+    const out = await parseLinesWithGemini({
+      lines: ["Dune"],
+      env,
+      fetchImpl,
+      sleep: async (ms) => void pauses.push(ms),
+    });
+    expect(out.items).toHaveLength(1);
+    expect(calls).toEqual([503, 503, 200]);
+    expect(pauses).toEqual(GEMINI_RETRY_DELAYS_MS);
+  });
+
+  it("gives up after two retries with the last status and no secrets", async () => {
+    const { fetchImpl, calls } = sequence([503]);
+    const err = await parseLinesWithGemini({ lines: ["Dune"], env, fetchImpl, sleep: async () => {} }).catch((e) => e);
+    expect(err).toBeInstanceOf(GeminiError);
+    expect(err.status).toBe(503);
+    expect(err.message).not.toContain(GEMINI_KEY);
+    expect(calls).toHaveLength(3);
+  });
+
+  it("does not retry a 400", async () => {
+    const { fetchImpl, calls } = sequence([400]);
+    await expect(parseLinesWithGemini({ lines: ["Dune"], env, fetchImpl, sleep: async () => {} })).rejects.toMatchObject({ status: 400 });
+    expect(calls).toHaveLength(1);
+  });
+
+  it("counts every attempt against the subrequest budget", async () => {
+    const { fetchImpl } = sequence([503]);
+    const budget = createSubrequestBudget(2);
+    await expect(
+      parseLinesWithGemini({ lines: ["Dune"], env, fetchImpl, budget, sleep: async () => {} }),
+    ).rejects.toMatchObject({ name: "SubrequestBudgetError" });
+  });
+
+  it("treats a hung connection as busy: retries after a timeout, then reports 504", async () => {
+    let n = 0;
+    const hang = (async () => {
+      n++;
+      throw new DOMException("The operation timed out", "TimeoutError");
+    }) as typeof fetch;
+    const err = await parseLinesWithGemini({ lines: ["Dune"], env, fetchImpl: hang, sleep: async () => {} }).catch((e) => e);
+    expect(err).toBeInstanceOf(GeminiError);
+    expect(err.status).toBe(504);
+    expect(n).toBe(3);
+
+    let m = 0;
+    const flaky = (async () => {
+      if (m++ === 0) throw new DOMException("The operation timed out", "TimeoutError");
+      return geminiBody([item()]);
+    }) as typeof fetch;
+    const out = await parseLinesWithGemini({ lines: ["Dune"], env, fetchImpl: flaky, sleep: async () => {} });
+    expect(out.items).toHaveLength(1);
   });
 });

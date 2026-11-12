@@ -7,7 +7,7 @@ export const CLIENT_SCRIPT = `
     t.textContent = msg;
     t.hidden = false;
     clearTimeout(toast.h);
-    toast.h = setTimeout(function () { t.hidden = true; }, 6000);
+    toast.h = setTimeout(function () { t.hidden = true; }, 9000);
   }
   function call(method, url, body) {
     return fetch(url, {
@@ -39,11 +39,28 @@ export const CLIENT_SCRIPT = `
       var f = document.getElementById("rate-" + id);
       if (f) f.hidden = !f.hidden;
     } else if (a === "sweep") {
+      if (el.disabled) return;
       el.disabled = true;
+      toast("Sweeping the inbox...");
       call("POST", "/api/sweep").then(function (r) {
-        toast("Sweep done: " + JSON.stringify(r));
-        setTimeout(function () { location.reload(); }, 1200);
-      }, function (e) { el.disabled = false; toast(e.message); });
+        var msg;
+        var reload = false;
+        if (r.skipped === "no-inbox-doc") { msg = "Inbox is not configured: add the INBOX_DOC_ID secret."; }
+        else if (r.skipped === "nothing-to-do") { msg = "The inbox is empty. Add a line under the header in the Doc first."; }
+        else if (r.ingest) {
+          var g = r.ingest;
+          msg = g.created + " new, " + g.merged + " merged, " + g.skippedDuplicates + " already seen";
+          if (g.unparsedLines && g.unparsedLines.length) msg += ", " + g.unparsedLines.length + " could not be read";
+          if (r.cleared === false) msg += ". The Doc could not be cleared; it will retry in 15 minutes.";
+          reload = true;
+        } else { msg = "Sweep finished."; }
+        el.disabled = false;
+        toast(msg);
+        if (reload) setTimeout(function () { location.reload(); }, 3500);
+      }, function (e) {
+        el.disabled = false;
+        toast(/Gemini|parser/i.test(e.message) ? "The AI parser is busy. Your lines are safe in the Doc; try again in a minute." : e.message);
+      });
     } else if (a === "backup") {
       if (el.disabled) return;
       el.disabled = true;
