@@ -52,6 +52,15 @@ export function normalizeShape(parsed: unknown, lineCount: number): unknown {
   const wrapped = Array.isArray(parsed) ? { items: parsed } : parsed;
   const items = (wrapped as { items?: unknown } | null)?.items;
   if (!Array.isArray(items)) return wrapped;
+  // A model without null support fills unknowns with placeholders such as 0. Those mean "unknown".
+  for (const i of items) {
+    if (!i || typeof i !== "object") continue;
+    const r = i as Record<string, unknown>;
+    for (const k of ["yearHint", "consumedYear"]) {
+      if (typeof r[k] === "number" && (r[k] < 1800 || r[k] > 2100)) r[k] = null;
+    }
+    if (typeof r.myRating === "number" && (r.myRating < 1 || r.myRating > 5)) r.myRating = null;
+  }
   const idx = items.map((i) => (i as { lineIndex?: unknown } | null)?.lineIndex).filter((n): n is number => Number.isInteger(n));
   if (idx.length > 0 && Math.min(...idx) >= 1 && Math.max(...idx) === lineCount) {
     return {
@@ -66,13 +75,19 @@ export function normalizeShape(parsed: unknown, lineCount: number): unknown {
 }
 
 /** Workers AI wants lowercase JSON Schema types. */
-function toJsonSchema(): unknown {
+export function toJsonSchema(): unknown {
   const lower = (n: unknown): unknown => {
     if (Array.isArray(n)) return n.map(lower);
     if (n && typeof n === "object") {
-      return Object.fromEntries(
-        Object.entries(n).map(([k, v]) => [k, k === "type" && typeof v === "string" ? v.toLowerCase() : lower(v)]),
-      );
+      const o = n as Record<string, unknown>;
+      const out: Record<string, unknown> = {};
+      for (const [k, v] of Object.entries(o)) {
+        // "nullable" is Gemini's dialect. JSON Schema needs a type union, or the model must invent a number.
+        if (k === "nullable") continue;
+        if (k === "type" && typeof v === "string") out[k] = o.nullable === true ? [v.toLowerCase(), "null"] : v.toLowerCase();
+        else out[k] = lower(v);
+      }
+      return out;
     }
     return n;
   };

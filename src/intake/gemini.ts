@@ -164,6 +164,8 @@ export interface ParseInput {
   budget?: SubrequestBudget;
   /** Pause between retries. Injected by tests so they do not wait. */
   sleep?: (ms: number) => Promise<void>;
+  /** Retries after the first attempt. Defaults to the full retry schedule. */
+  maxRetries?: number;
 }
 
 const RETRYABLE = new Set([429, 500, 502, 503, 504]);
@@ -205,7 +207,7 @@ export async function parseLinesWithGemini(
   let res: Response | undefined;
   for (let attempt = 0; ; attempt++) {
     input.budget?.take();
-    const last = attempt >= GEMINI_RETRY_DELAYS_MS.length;
+    const last = attempt >= Math.min(input.maxRetries ?? GEMINI_RETRY_DELAYS_MS.length, GEMINI_RETRY_DELAYS_MS.length);
     try {
       res = await (input.fetchImpl ?? fetch)(url, { ...init, signal: AbortSignal.timeout(GEMINI_ATTEMPT_TIMEOUT_MS) });
     } catch (e) {
