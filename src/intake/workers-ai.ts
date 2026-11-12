@@ -10,7 +10,7 @@ export async function parseLinesWithWorkersAI(input: {
   lines: string[];
   env: IntakeEnv;
   budget?: SubrequestBudget;
-}): Promise<{ items: ParsedItem[]; rejected: number }> {
+}): Promise<{ items: ParsedItem[]; rejected: number; diag: string }> {
   const ai = input.env.AI;
   if (!ai) throw new GeminiError("Workers AI is not bound", 0);
   input.budget?.take();
@@ -21,7 +21,7 @@ export async function parseLinesWithWorkersAI(input: {
         messages: [{ role: "user", content: buildPrompt(input.lines) }],
         response_format: { type: "json_schema", json_schema: toJsonSchema() },
         temperature: 0,
-        max_tokens: 2048,
+        max_tokens: 4096,
       }),
       new Promise<never>((_, rej) => setTimeout(() => rej(new Error("timeout")), WORKERS_AI_TIMEOUT_MS)),
     ]);
@@ -40,11 +40,12 @@ export async function parseLinesWithWorkersAI(input: {
   }
   if (!parsed || typeof parsed !== "object") throw new GeminiError("Workers AI returned no result", 502);
   const result = validateGeminiItems(normalizeShape(parsed, input.lines.length), input.lines.length);
-  if (result.items.length === 0 && input.lines.length > 0) {
-    // Visible in Worker logs: what shape the model returned when nothing usable came out of it.
-    console.warn("Workers AI gave no usable items", JSON.stringify(parsed).slice(0, 300), "rejected:", result.rejected);
-  }
-  return result;
+  const diag =
+    `Workers AI returned ${result.items.length} usable items, ${result.rejected} rejected` +
+    (result.reasons.length ? ` (${result.reasons.slice(0, 3).join("; ")})` : "") +
+    (result.items.length === 0 ? `; raw: ${JSON.stringify(parsed).slice(0, 200)}` : "");
+  if (result.items.length === 0 && input.lines.length > 0) console.warn(diag);
+  return { items: result.items, rejected: result.rejected, diag };
 }
 
 /** Models drift from the schema: accept a bare array, and line numbers counted from 1. */

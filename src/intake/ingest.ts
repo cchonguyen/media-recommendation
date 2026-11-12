@@ -3,9 +3,13 @@ import { activityLog, intakeLog, mediaItems } from "../db/schema";
 import type { MediaItem } from "../db/schema";
 import { MAX_LINES_PER_RUN, hashLine } from "./lines";
 import { parseLines } from "./parse";
+import { GeminiError } from "./gemini";
 import type { MediaType, ParsedItem } from "./gemini";
+import { setCachedValue } from "../google/token";
 import { pacificDayAndHour } from "./pacific";
 import type { IngestDeps } from "./types";
+
+export const PARSE_DIAG_KEY = "last_parse_diag";
 
 export type IntakeSource = "gdoc" | "webhook";
 
@@ -133,12 +137,28 @@ export async function ingestRawLines(
   if (fresh.length === 0) return empty();
 
   // A Gemini failure throws here, before anything is written.
-  const parsed = await parseLines({
-    lines: fresh.map((f) => f.raw),
-    env,
-    fetchImpl: deps.fetchImpl,
-    budget: deps.budget,
-  });
+  // The last parser diagnostic lives in system_kv so a failure can be read from D1. It never fails a run.
+  const saveDiag = async (text: string) => {
+    try {
+      const value = JSON.stringify({ at: nowIso, lines: fresh.length, source, diag: text.slice(0, 1500) });
+      await setCachedValue(db, PARSE_DIAG_KEY, value, Math.floor(now.getTime() / 1000) + 30 * 86400);
+    } catch {
+      // Telemetry only.
+    }
+  };
+  let parsed: Awaited<ReturnType<typeof parseLines>>;
+  try {
+    parsed = await parseLines({
+      lines: fresh.map((f) => f.raw),
+      env,
+      fetchImpl: deps.fetchImpl,
+      budget: deps.budget,
+    });
+  } catch (e) {
+    if (e instanceof GeminiError) await saveDiag(`FAILED: ${e.message}${e.detail ? ` | ${e.detail}` : ""}`);
+    throw e;
+  }
+  if (parsed.items.length === 0 || parsed.rejected > 0) await saveDiag(parsed.diag ?? `parsed ${parsed.items.length} items, ${parsed.rejected} rejected`);
 
   const linesWithItems = new Set<number>();
   const groups = new Map<string, Group>();
