@@ -39,7 +39,30 @@ export async function parseLinesWithWorkersAI(input: {
     }
   }
   if (!parsed || typeof parsed !== "object") throw new GeminiError("Workers AI returned no result", 502);
-  return validateGeminiItems(parsed, input.lines.length);
+  const result = validateGeminiItems(normalizeShape(parsed, input.lines.length), input.lines.length);
+  if (result.items.length === 0 && input.lines.length > 0) {
+    // Visible in Worker logs: what shape the model returned when nothing usable came out of it.
+    console.warn("Workers AI gave no usable items", JSON.stringify(parsed).slice(0, 300), "rejected:", result.rejected);
+  }
+  return result;
+}
+
+/** Models drift from the schema: accept a bare array, and line numbers counted from 1. */
+export function normalizeShape(parsed: unknown, lineCount: number): unknown {
+  const wrapped = Array.isArray(parsed) ? { items: parsed } : parsed;
+  const items = (wrapped as { items?: unknown } | null)?.items;
+  if (!Array.isArray(items)) return wrapped;
+  const idx = items.map((i) => (i as { lineIndex?: unknown } | null)?.lineIndex).filter((n): n is number => Number.isInteger(n));
+  if (idx.length > 0 && Math.min(...idx) >= 1 && Math.max(...idx) === lineCount) {
+    return {
+      items: items.map((i) =>
+        i && typeof i === "object" && Number.isInteger((i as { lineIndex?: unknown }).lineIndex)
+          ? { ...(i as object), lineIndex: (i as { lineIndex: number }).lineIndex - 1 }
+          : i,
+      ),
+    };
+  }
+  return wrapped;
 }
 
 /** Workers AI wants lowercase JSON Schema types. */

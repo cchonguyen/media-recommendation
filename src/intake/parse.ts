@@ -12,12 +12,8 @@ export async function parseLines(input: ParseInput): Promise<{ items: ParsedItem
       // Nothing usable from a non-empty batch means the model misfired: let Gemini try before giving up.
       if (out.items.length > 0 || input.lines.length === 0 || !input.env.GEMINI_API_KEY) return out;
       console.warn("Workers AI returned no items, falling back to Gemini");
-      try {
-        return await parseLinesWithGemini(input);
-      } catch (e) {
-        if (!(e instanceof GeminiError)) throw e;
-        return out;
-      }
+      // A Gemini failure is thrown, not swallowed, so the sweep names the real reason.
+      return await parseLinesWithGemini(input);
     } catch (e) {
       if (!(e instanceof GeminiError)) throw e;
       console.warn("Workers AI parse failed, falling back to Gemini:", e.message);

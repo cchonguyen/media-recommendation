@@ -61,4 +61,25 @@ describe("parseLines", () => {
     });
     await expect(parseLines({ lines, env: { AI: a.binding } })).rejects.toBeInstanceOf(GeminiError);
   });
+
+  it("accepts a bare array and line numbers counted from 1", async () => {
+    const a = ai(async () => ({ response: [item({ lineIndex: 1, title: "A" }), item({ lineIndex: 2, title: "B" })] }));
+    const out = await parseLines({ lines: ["a", "b"], env: { AI: a.binding } });
+    expect(out.items.map((i) => [i.lineIndex, i.title])).toEqual([[0, "A"], [1, "B"]]);
+  });
+
+  it("falls back to Gemini when Workers AI returns no items", async () => {
+    const a = ai(async () => ({ response: { items: [] } }));
+    const g = gemini();
+    const out = await parseLines({ lines, env: { AI: a.binding, GEMINI_API_KEY: GEMINI_KEY }, fetchImpl: g.fetchImpl });
+    expect(out.items[0]!.title).toBe("FromGemini");
+  });
+
+  it("throws Gemini's error when Workers AI is empty and Gemini fails", async () => {
+    const a = ai(async () => ({ response: { items: [] } }));
+    const bad = (async () => new Response("{}", { status: 429 })) as typeof fetch;
+    await expect(
+      parseLines({ lines, env: { AI: a.binding, GEMINI_API_KEY: GEMINI_KEY }, fetchImpl: bad, sleep: async () => {} }),
+    ).rejects.toMatchObject({ name: "GeminiError", status: 429 });
+  });
 });
