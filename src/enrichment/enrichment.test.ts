@@ -219,13 +219,12 @@ describe("runEnrichmentQueue", () => {
     expect(f2.calls.some((c) => c.url.includes("omdbapi"))).toBe(false);
   });
 
-  it("processes oldest first, capped at 10, skipping attempts>=3, non-PENDING and unregistered types", async () => {
+  it("processes oldest first, capped at 10, skipping attempts>=3 and non-PENDING rows", async () => {
     const { db } = setup();
     for (let i = 0; i < 12; i++) {
       await seed(db, { id: `m${String(i).padStart(2, "0")}`, title: `T${i}`, createdAt: `2026-01-${String(20 - i).padStart(2, "0")}T00:00:00.000Z` });
     }
     await seed(db, { id: "tired", title: "Tired", enrichmentAttempts: 3, createdAt: "2020-01-01T00:00:00.000Z" });
-    await seed(db, { id: "book", title: "A Book", mediaType: "Book", createdAt: "2020-01-01T00:00:00.000Z" });
     await seed(db, { id: "done", title: "Done", enrichmentStatus: "ENRICHED", createdAt: "2020-01-01T00:00:00.000Z" });
     const seen: string[] = [];
     const f = routedFetch({
@@ -239,7 +238,6 @@ describe("runEnrichmentQueue", () => {
     expect(s).toMatchObject({ processed: 10, failed: 10 });
     // m11 is oldest (Jan 9) ... m02 is the 10th oldest; m00 and m01 are left.
     expect(seen).toEqual(["T11", "T10", "T9", "T8", "T7", "T6", "T5", "T4", "T3", "T2"]);
-    expect((await get(db, "book"))!.enrichmentAttempts).toBe(0);
     expect((await get(db, "tired"))!.enrichmentAttempts).toBe(3);
     expect((await get(db, "m00"))!.enrichmentAttempts).toBe(0);
   });

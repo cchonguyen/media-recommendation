@@ -13,7 +13,16 @@ export function routedFetch(routes: Record<string, Route | unknown>) {
   const calls: RecordedCall[] = [];
   const fetchImpl = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = new URL(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
-    const call: RecordedCall = { url: url.href, method: init?.method ?? "GET", headers: {}, body: null };
+    const headers: Record<string, string> = {};
+    new Headers(init?.headers).forEach((v, k) => {
+      headers[k] = v;
+    });
+    const call: RecordedCall = {
+      url: url.href,
+      method: init?.method ?? "GET",
+      headers,
+      body: typeof init?.body === "string" ? init.body : null,
+    };
     calls.push(call);
     const key = `${url.host}${url.pathname}`;
     const r = routes[key];
