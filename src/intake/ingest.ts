@@ -158,7 +158,7 @@ export async function ingestRawLines(
     if (e instanceof GeminiError) await saveDiag(`FAILED: ${e.message}${e.detail ? ` | ${e.detail}` : ""}`);
     throw e;
   }
-  if (parsed.items.length === 0 || parsed.rejected > 0) await saveDiag(parsed.diag ?? `parsed ${parsed.items.length} items, ${parsed.rejected} rejected`);
+  if (parsed.items.length === 0 || parsed.rejected > 0 || parsed.degraded) await saveDiag(parsed.diag ?? `parsed ${parsed.items.length} items, ${parsed.rejected} rejected`);
 
   const linesWithItems = new Set<number>();
   const groups = new Map<string, Group>();
