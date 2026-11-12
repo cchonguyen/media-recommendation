@@ -3,6 +3,7 @@ import { Hono } from "hono";
 import { seed, setup } from "../intake/test-fixtures";
 import { curatedListItems, curatedLists } from "../db/schema";
 import { createUiRoutes } from "./now-next";
+import { setCachedValue } from "../google/token";
 
 const NOW = new Date("2026-07-10T12:00:00Z");
 
@@ -45,6 +46,22 @@ describe("Now & Next UI", () => {
     const g = await (await h.get("/?time=gt600")).text();
     expect(g).toContain("Long Game");
     expect(g).not.toContain("Short Show");
+  });
+});
+
+describe("Backup button", () => {
+  it("is enabled and shows the last backup time", async () => {
+    const h = harness();
+    const never = await (await h.get("/")).text();
+    expect(never).toContain("Last backup: never");
+    expect(never).not.toContain("Coming soon");
+    expect(never).toMatch(/<button[^>]*data-action="backup"/);
+    expect(never).not.toMatch(/data-action="backup"[^>]*aria-disabled/);
+    await setCachedValue(h.db, "last_backup_at", "2026-07-09T08:30:00.000Z", 4102444800);
+    await setCachedValue(h.db, "last_inbox_sync", "2026-07-10T11:00:00.000Z", 4102444800);
+    const html = await (await h.get("/")).text();
+    expect(html).toContain("Last backup: 2026-07-09 08:30 UTC");
+    expect(html).toContain("Last inbox sync: 2026-07-10 11:00 UTC");
   });
 });
 

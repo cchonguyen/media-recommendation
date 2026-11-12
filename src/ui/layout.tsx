@@ -1,14 +1,15 @@
 import { drizzle } from "drizzle-orm/d1";
-import { ne, sql } from "drizzle-orm";
+import { and, gt, inArray, ne, sql } from "drizzle-orm";
 import { raw } from "hono/html";
 import type { Child } from "hono/jsx";
-import { mediaItems } from "../db/schema";
+import { mediaItems, systemKv } from "../db/schema";
 import { LAST_INBOX_SYNC_KEY } from "../api/time";
-import { getCachedValue } from "../google/token";
+import { LAST_BACKUP_KEY } from "../backup/export";
 import { CLIENT_SCRIPT } from "./client";
 
 export interface StatusStrip {
   lastSync: string | null;
+  lastBackup: string | null;
   pending: number;
   failed: number;
 }
@@ -36,9 +37,19 @@ export async function loadStatusStrip(d1: D1Database, now: Date): Promise<Status
       })
       .from(mediaItems)
       .where(ne(mediaItems.status, "Archived")),
-    getCachedValue(db, LAST_INBOX_SYNC_KEY, Math.floor(now.getTime() / 1000)),
+    // One query for both stamps keeps the D1 read count unchanged.
+    db
+      .select()
+      .from(systemKv)
+      .where(and(inArray(systemKv.key, [LAST_INBOX_SYNC_KEY, LAST_BACKUP_KEY]), gt(systemKv.expiresAt, Math.floor(now.getTime() / 1000)))),
   ]);
-  return { lastSync: last, pending: Number(agg[0]?.pending ?? 0), failed: Number(agg[0]?.failed ?? 0) };
+  const kv = new Map(last.map((r) => [r.key, r.value]));
+  return {
+    lastSync: kv.get(LAST_INBOX_SYNC_KEY) ?? null,
+    lastBackup: kv.get(LAST_BACKUP_KEY) ?? null,
+    pending: Number(agg[0]?.pending ?? 0),
+    failed: Number(agg[0]?.failed ?? 0),
+  };
 }
 
 const CSS = `
@@ -112,7 +123,8 @@ export function Layout(props: { active: string; status: StatusStrip; title?: str
               <span class={status.failed > 0 ? "bad" : ""}>Failed: {status.failed}</span>
               <span class="grow" />
               <button type="button" class="primary" data-action="sweep">Sweep Inbox Now</button>
-              <button type="button" data-action="backup" aria-disabled="true" title="Coming soon">
+              <span id="last-backup">Last backup: {formatSync(status.lastBackup)}</span>
+              <button type="button" data-action="backup">
                 Backup to Google Sheets
               </button>
             </div>

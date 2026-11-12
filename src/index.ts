@@ -6,6 +6,8 @@ import { runEnrichmentQueue } from "./enrichment/queue";
 import { createApiRoutes } from "./api/routes";
 import { recordInboxSync } from "./api/time";
 import { createListsRoutes } from "./lists";
+import { createBackupRoutes, exportToSheets } from "./backup";
+import { runGrooming } from "./grooming";
 import { createShareRoutes } from "./share";
 import { createUiRoutes } from "./ui/now-next";
 
@@ -30,6 +32,7 @@ app.get("/health", (c) => c.json({ ok: true }));
 app.route("/", createIntakeRoutes());
 app.route("/api", createApiRoutes());
 app.route("/api", createListsRoutes());
+app.route("/api", createBackupRoutes());
 app.route("/", createShareRoutes());
 app.route("/", createUiRoutes());
 
@@ -58,7 +61,19 @@ export async function scheduled(
       }
       break;
     case "0 10 * * *":
-      // Filled by later slices: Sheets backup and nightly grooming.
+      // Sheets backup, then nightly grooming. Each has its own try/catch and budget.
+      try {
+        await exportToSheets({ db: drizzle(env.DB), env });
+      } catch (e) {
+        const err = e instanceof Error ? e : new Error(String(e));
+        console.error("sheets backup failed", err.name, err.message);
+      }
+      try {
+        await runGrooming({ db: drizzle(env.DB), env });
+      } catch (e) {
+        const err = e instanceof Error ? e : new Error(String(e));
+        console.error("grooming failed", err.name, err.message);
+      }
       break;
     default:
       break;

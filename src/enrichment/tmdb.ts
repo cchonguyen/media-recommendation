@@ -63,7 +63,11 @@ interface Details {
   "watch/providers"?: { results?: Record<string, { flatrate?: { provider_name: string }[] }> };
 }
 
-async function tmdbGet<T>(path: string, params: Record<string, string>, a: TmdbArgs): Promise<T> {
+async function tmdbGet<T>(
+  path: string,
+  params: Record<string, string>,
+  a: Pick<TmdbArgs, "apiKey" | "fetchImpl" | "budget">,
+): Promise<T> {
   a.budget?.take();
   const url = new URL(`${API}${path}`);
   for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
@@ -156,9 +160,23 @@ export async function fetchTmdbMetadata(a: TmdbArgs): Promise<TmdbResult> {
   const search = await tmdbGet<{ results?: SearchHit[] }>(isMovie ? "/search/movie" : "/search/tv", searchParams, a);
   const hit = pickSearchHit(search.results ?? [], a.title);
   if (!hit) return { kind: "not-found" };
+  return fetchTmdbById({ ...a, tmdbId: String(hit.id) });
+}
 
+export interface TmdbByIdArgs {
+  mediaType: "Movie" | "TV";
+  tmdbId: string;
+  apiKey: string;
+  fetchImpl?: typeof fetch;
+  budget?: SubrequestBudget;
+  now: Date;
+}
+
+/** One details request by stored TMDB id (no search). Throws TmdbError on HTTP failure, so a 404 is an error here. */
+export async function fetchTmdbById(a: TmdbByIdArgs): Promise<TmdbResult> {
+  const isMovie = a.mediaType === "Movie";
   const d = await tmdbGet<Details>(
-    `${isMovie ? "/movie" : "/tv"}/${hit.id}`,
+    `${isMovie ? "/movie" : "/tv"}/${encodeURIComponent(a.tmdbId)}`,
     {
       append_to_response: isMovie
         ? "release_dates,watch/providers,credits"
