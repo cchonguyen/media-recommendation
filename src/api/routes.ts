@@ -464,7 +464,7 @@ export function createApiRoutes(options: ApiOptions = {}) {
     try {
       result = await sweep({ db, env: c.env, now: nowFn });
     } catch (e) {
-      if (e instanceof GeminiError) throw new ApiError(502, "sweep_failed", "The text parser is unavailable.");
+      if (e instanceof GeminiError) throw new ApiError(502, "sweep_failed", `The text parser is unavailable (Gemini HTTP ${e.status}${e.detail ? `: ${e.detail}` : ""}).`);
       if (e instanceof GoogleAuthError || e instanceof GoogleApiError) {
         throw new ApiError(502, "sweep_failed", "Google request failed.");
       }

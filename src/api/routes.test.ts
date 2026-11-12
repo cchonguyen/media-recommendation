@@ -484,6 +484,12 @@ describe("sweep", () => {
     expect((await h.call("GET", "/api/status")).json.lastInboxSyncAt).toBeNull();
   });
 
+  it("shows Gemini's status and reason on a failed sweep", async () => {
+    const h = harness({ sweep: async () => { throw new GeminiError("Gemini request failed", 429, "Quota exceeded"); } });
+    const r = await h.call("POST", "/api/sweep");
+    expect(r.json.message).toBe("The text parser is unavailable (Gemini HTTP 429: Quota exceeded).");
+  });
+
   it("returns 500 without details for unexpected errors", async () => {
     const spy = vi.spyOn(console, "error").mockImplementation(() => {});
     const h = harness({ sweep: async () => { throw new Error("SECRET"); } });

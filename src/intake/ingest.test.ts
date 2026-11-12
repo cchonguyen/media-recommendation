@@ -312,6 +312,15 @@ describe("Gemini retries", () => {
     expect(calls).toHaveLength(3);
   });
 
+  it("reports Gemini's own reason in the error, trimmed", async () => {
+    const f = (async () =>
+      jsonResponse({ error: { message: "Quota exceeded for this model" } }, 429)) as typeof fetch;
+    const err = await parseLinesWithGemini({ lines: ["Dune"], env, fetchImpl: f, sleep: async () => {} }).catch((e) => e);
+    expect(err.status).toBe(429);
+    expect(err.message).toBe("Gemini request failed: HTTP 429 (Quota exceeded for this model)");
+    expect(err.message).not.toContain(GEMINI_KEY);
+  });
+
   it("does not retry a 400", async () => {
     const { fetchImpl, calls } = sequence([400]);
     await expect(parseLinesWithGemini({ lines: ["Dune"], env, fetchImpl, sleep: async () => {} })).rejects.toMatchObject({ status: 400 });
