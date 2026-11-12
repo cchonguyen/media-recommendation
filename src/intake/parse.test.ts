@@ -82,4 +82,28 @@ describe("parseLines", () => {
       parseLines({ lines, env: { AI: a.binding, GEMINI_API_KEY: GEMINI_KEY }, fetchImpl: bad, sleep: async () => {} }),
     ).rejects.toMatchObject({ name: "GeminiError", status: 429 });
   });
+
+  it("sends Workers AI a real nullable JSON Schema", async () => {
+    const { toJsonSchema } = await import("./workers-ai");
+    const props = (toJsonSchema() as { properties: { items: { items: { properties: Record<string, Record<string, unknown>> } } } }).properties.items.items.properties;
+    expect(props.yearHint).toEqual({ type: ["integer", "null"] });
+    expect(props.myRating).toEqual({ type: ["number", "null"] });
+    expect(props.title).toEqual({ type: "string" });
+  });
+
+  it("treats placeholder years and ratings from Workers AI as unknown", async () => {
+    const a = ai(async () => ({ response: { items: [item({ yearHint: 0, myRating: 0, consumedYear: 0 })] } }));
+    const out = await parseLines({ lines, env: { AI: a.binding } });
+    expect(out).toMatchObject({ rejected: 0, items: [{ title: "Dune", yearHint: null, myRating: null, consumedYear: null }] });
+  });
+
+  it("makes a single Gemini attempt after an empty Workers AI result", async () => {
+    const a = ai(async () => ({ response: { items: [] } }));
+    let n = 0;
+    const bad = (async () => (n++, new Response("{}", { status: 503 }))) as typeof fetch;
+    await expect(
+      parseLines({ lines, env: { AI: a.binding, GEMINI_API_KEY: GEMINI_KEY }, fetchImpl: bad, sleep: async () => {} }),
+    ).rejects.toMatchObject({ status: 503 });
+    expect(n).toBe(1);
+  });
 });

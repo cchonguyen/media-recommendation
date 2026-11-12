@@ -1,19 +1,26 @@
 // Static client script, injected inline. Never interpolates row data.
 export const CLIENT_SCRIPT = `
 (function () {
-  function toast(msg) {
+  function toast(msg, sticky) {
     var t = document.getElementById("toast");
     if (!t) return;
     t.textContent = msg;
     t.hidden = false;
     clearTimeout(toast.h);
-    toast.h = setTimeout(function () { t.hidden = true; }, 9000);
+    if (!sticky) toast.h = setTimeout(function () { t.hidden = true; }, 9000);
   }
-  function call(method, url, body) {
+  function call(method, url, body, timeoutMs) {
+    var ctl = timeoutMs && window.AbortController ? new AbortController() : null;
+    var timer = ctl ? setTimeout(function () { ctl.abort(); }, timeoutMs) : null;
     return fetch(url, {
       method: method,
       headers: { "content-type": "application/json" },
-      body: body === undefined ? undefined : JSON.stringify(body)
+      body: body === undefined ? undefined : JSON.stringify(body),
+      signal: ctl ? ctl.signal : undefined
+    }).then(function (r) { clearTimeout(timer); return r; }, function (e) {
+      clearTimeout(timer);
+      if (e && e.name === "AbortError") throw new Error("No answer after " + Math.round(timeoutMs / 1000) + " seconds. Your lines are safe in the Doc; try again in a minute.");
+      throw new Error("Could not reach the server. Your lines are safe in the Doc.");
     }).then(function (r) {
       return r.json().catch(function () { return {}; }).then(function (j) {
         if (!r.ok) throw new Error(j.message || j.error || ("Request failed (" + r.status + ")"));
@@ -41,8 +48,8 @@ export const CLIENT_SCRIPT = `
     } else if (a === "sweep") {
       if (el.disabled) return;
       el.disabled = true;
-      toast("Sweeping the inbox...");
-      call("POST", "/api/sweep").then(function (r) {
+      toast("Sweeping the inbox... this can take up to a minute.", true);
+      call("POST", "/api/sweep", undefined, 60000).then(function (r) {
         var msg;
         var reload = false;
         if (r.skipped === "no-inbox-doc") { msg = "Inbox is not configured: add the INBOX_DOC_ID secret."; }
