@@ -7,12 +7,14 @@ import { createApiRoutes } from "./api/routes";
 import { recordInboxSync } from "./api/time";
 import { createListsRoutes } from "./lists";
 import { createBackupRoutes, exportToSheets } from "./backup";
+import type { AiBinding } from "./intake/types";
 import { runGrooming } from "./grooming";
 import { createShareRoutes } from "./share";
 import { createUiRoutes } from "./ui/now-next";
 
 export type Env = {
   DB: D1Database;
+  AI?: AiBinding;
   GOOGLE_SERVICE_ACCOUNT_EMAIL?: string;
   GOOGLE_PRIVATE_KEY?: string;
   GEMINI_API_KEY?: string;

@@ -4,6 +4,7 @@
   "compatibility_date": "2026-11-11",
   "workers_dev": false,
   "preview_urls": false,
+  "ai": { "binding": "AI" },
   "observability": { "enabled": true },
   "d1_databases": [
     {
