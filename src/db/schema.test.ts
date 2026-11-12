@@ -9,6 +9,7 @@ import {
   curatedLists,
   intakeLog,
   mediaItems,
+  sweepRuns,
   systemKv,
 } from "./schema";
 
@@ -19,14 +20,22 @@ const col = (table: Parameters<typeof getTableConfig>[0], name: string) => {
 };
 
 describe("tables", () => {
-  it("defines all six tables", () => {
+  it("defines all seven tables", () => {
     expect(
-      [mediaItems, activityLog, intakeLog, systemKv, curatedLists, curatedListItems]
+      [mediaItems, activityLog, intakeLog, systemKv, curatedLists, curatedListItems, sweepRuns]
         .map((t) => getTableConfig(t).name)
         .sort(),
     ).toEqual(
-      ["activity_log", "curated_list_items", "curated_lists", "intake_log", "media_items", "system_kv"],
+      ["activity_log", "curated_list_items", "curated_lists", "intake_log", "media_items", "sweep_runs", "system_kv"],
     );
+  });
+
+  it("sweep_runs has the expected columns", () => {
+    expect(getTableConfig(sweepRuns).columns.map((c) => c.name).sort()).toEqual(
+      ["cleared", "created", "diag", "duplicates", "duration_ms", "error", "id", "kept_in_doc", "lines_seen", "merged", "outcome", "rejected", "stage", "started_at", "trigger"],
+    );
+    expect(col(sweepRuns, "id").primary).toBe(true);
+    expect(col(sweepRuns, "trigger").enumValues).toEqual(["cron", "button"]);
   });
 });
 

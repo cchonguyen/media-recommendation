@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { drizzle } from "drizzle-orm/d1";
 import { sweepInboxDoc } from "./intake/doc-sweep";
+import { runLoggedSweep } from "./intake/sweep-ledger";
 import { createIntakeRoutes } from "./intake/webhook";
 import { runEnrichmentQueue } from "./enrichment/queue";
 import { createApiRoutes } from "./api/routes";
@@ -48,7 +49,7 @@ export async function scheduled(
       // Inbox sweep, then the drip enrichment queue. Each has its own try/catch.
       try {
         const db = drizzle(env.DB);
-        const swept = await sweepInboxDoc({ db, env });
+        const swept = await runLoggedSweep({ db, env }, "cron", sweepInboxDoc);
         if (!("skipped" in swept) || swept.skipped !== "no-inbox-doc") await recordInboxSync(db, new Date());
       } catch (e) {
         // Only name and message are logged: neither carries secrets.

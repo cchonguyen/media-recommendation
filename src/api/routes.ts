@@ -10,6 +10,7 @@ import type { Db } from "../google/token";
 import { GoogleApiError, SubrequestBudgetError } from "../google/api";
 import { GeminiError } from "../intake/gemini";
 import { sweepInboxDoc } from "../intake/doc-sweep";
+import { runLoggedSweep } from "../intake/sweep-ledger";
 import type { SweepDeps, SweepResult } from "../intake/doc-sweep";
 import { pacificDayAndHour } from "../intake/pacific";
 import type { IntakeEnv } from "../intake/types";
@@ -462,7 +463,7 @@ export function createApiRoutes(options: ApiOptions = {}) {
     const now = nowFn();
     let result: SweepResult;
     try {
-      result = await sweep({ db, env: c.env, now: nowFn });
+      result = await runLoggedSweep({ db, env: c.env, now: nowFn }, "button", sweep);
     } catch (e) {
       if (e instanceof GeminiError) throw new ApiError(502, "sweep_failed", `The text parser is unavailable (Gemini HTTP ${e.status}${e.detail ? `: ${e.detail}` : ""}).`);
       if (e instanceof GoogleAuthError || e instanceof GoogleApiError) {

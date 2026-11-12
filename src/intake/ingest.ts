@@ -30,6 +30,8 @@ export interface IngestResult {
   rejected: number;
   remaining: number;
   items: IngestedItem[];
+  /** One line on what the parsers did, kept in the sweep ledger. */
+  diag?: string;
 }
 
 interface Group {
@@ -306,7 +308,7 @@ export async function ingestRawLines(
   }
 
   if (stmts.length === 0) {
-    return { ...empty(), unparsedLines, rejected: parsed.rejected };
+    return { ...empty(), unparsedLines, rejected: parsed.rejected, diag: parsed.diag };
   }
 
   try {
@@ -333,5 +335,6 @@ export async function ingestRawLines(
     rejected: parsed.rejected,
     remaining,
     items: outItems,
+    diag: parsed.diag,
   };
 }
