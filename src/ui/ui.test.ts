@@ -20,7 +20,7 @@ describe("Now & Next UI", () => {
     expect(res.headers.get("content-type")).toContain("text/html");
     const html = await res.text();
     expect(html.startsWith("<!doctype html>")).toBe(true);
-    for (const s of ["Active", "Paused", "Up Next", "Pending Review", "Sweep Inbox Now", 'data-action="backup"', "/library/movie", "Completed Archive"]) {
+    for (const s of ["Active", "Paused", "Up Next", "Pending Review", "Sweep Inbox Now", 'data-action="backup"', "/library/movies", "Completed Archive"]) {
       expect(html).toContain(s);
     }
     expect(html).toContain("Up Next is empty.");
@@ -44,5 +44,73 @@ describe("Now & Next UI", () => {
     const g = await (await h.get("/?time=gt600")).text();
     expect(g).toContain("Long Game");
     expect(g).not.toContain("Short Show");
+  });
+});
+
+describe("Library UI", () => {
+  async function lib() {
+    const h = harness();
+    await seed(h.db, { id: "m1", title: "Alpha Movie", mediaType: "Movie", status: "Backlog" });
+    await seed(h.db, { id: "m2", title: "Gone Movie", mediaType: "Movie", status: "Archived" });
+    await seed(h.db, { id: "m3", title: "100%_Real", mediaType: "Movie", status: "Backlog" });
+    await seed(h.db, { id: "t1", title: "Some Show", mediaType: "TV", status: "Backlog" });
+    await seed(h.db, { id: "c1", title: "Finished Book", mediaType: "Book", status: "Completed", consumedYear: 2025 });
+    return h;
+  }
+
+  it("every library URL returns 200 with its heading and nav links match", async () => {
+    const h = await lib();
+    const pages: [string, string][] = [
+      ["movies", "Movies"], ["tv", "TV"], ["books", "Books"], ["games", "Games"],
+      ["podcasts", "Podcasts"], ["one-offs", "One-Offs"], ["completed", "Completed Archive"],
+    ];
+    for (const [slug, heading] of pages) {
+      const res = await h.get(`/library/${slug}`);
+      expect(res.status).toBe(200);
+      const html = await res.text();
+      expect(html).toContain(`<h1>${heading}</h1>`);
+      expect(html).toContain(`href="/library/${slug}"`);
+    }
+  });
+
+  it("returns 404 with layout for unknown type", async () => {
+    const h = await lib();
+    const res = await h.get("/library/movie");
+    expect(res.status).toBe(404);
+    expect(await res.text()).toContain("Sweep Inbox Now");
+  });
+
+  it("clamps pagination and handles hostile params", async () => {
+    const h = await lib();
+    for (const p of ["page=0", "page=99999", "page=abc", "page=-3"]) {
+      const res = await h.get(`/library/movies?${p}`);
+      expect(res.status).toBe(200);
+      expect(await res.text()).toContain("Alpha Movie");
+    }
+    for (const p of ["sort=evil;DROP", "dir=sideways", "q=%27;DROP%20TABLE%20media_items;--", "sort=title&dir=asc"]) {
+      const res = await h.get(`/library/movies?${p}`);
+      expect(res.status).toBe(200);
+    }
+    expect(await (await h.get("/library/movies")).text()).toContain("Alpha Movie");
+  });
+
+  it("hides Archived by default, shows with filter, escapes LIKE wildcards", async () => {
+    const h = await lib();
+    const def = await (await h.get("/library/movies")).text();
+    expect(def).not.toContain("Gone Movie");
+    expect(def).not.toContain("Some Show");
+    expect(await (await h.get("/library/movies?status=Archived")).text()).toContain("Gone Movie");
+    const q = await (await h.get("/library/movies?q=%25_")).text();
+    expect(q).toContain("100%_Real");
+    expect(q).not.toContain("Alpha Movie");
+  });
+
+  it("archive page shows only Completed", async () => {
+    const h = await lib();
+    const html = await (await h.get("/library/completed")).text();
+    expect(html).toContain("Finished Book");
+    expect(html).not.toContain("Alpha Movie");
+    expect(await (await h.get("/library/completed?consumed_year=2024")).text()).not.toContain("Finished Book");
+    expect(await (await h.get("/library/completed?type=Book")).text()).toContain("Finished Book");
   });
 });
