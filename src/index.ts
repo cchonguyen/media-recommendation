@@ -5,6 +5,7 @@ import { createIntakeRoutes } from "./intake/webhook";
 import { runEnrichmentQueue } from "./enrichment/queue";
 import { createApiRoutes } from "./api/routes";
 import { recordInboxSync } from "./api/time";
+import { createListsRoutes } from "./lists";
 import { createUiRoutes } from "./ui/now-next";
 
 export type Env = {
@@ -27,6 +28,7 @@ export const app = new Hono<{ Bindings: Env }>();
 app.get("/health", (c) => c.json({ ok: true }));
 app.route("/", createIntakeRoutes());
 app.route("/api", createApiRoutes());
+app.route("/api", createListsRoutes());
 app.route("/", createUiRoutes());
 
 export async function scheduled(
