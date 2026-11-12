@@ -4,6 +4,7 @@ import { seed, setup } from "../intake/test-fixtures";
 import { curatedListItems, curatedLists } from "../db/schema";
 import { createUiRoutes } from "./now-next";
 import { setCachedValue } from "../google/token";
+import { CLIENT_SCRIPT } from "./client";
 
 const NOW = new Date("2026-07-10T12:00:00Z");
 
@@ -175,5 +176,15 @@ describe("Lists UI", () => {
   it("renders an empty /lists", async () => {
     const h = harness();
     expect(await (await h.get("/lists")).text()).toContain("No lists yet");
+  });
+});
+
+describe("client script", () => {
+  it("is valid JavaScript and gives plain-English sweep results", () => {
+    expect(() => new Function(CLIENT_SCRIPT)).not.toThrow();
+    for (const text of ["Sweeping the inbox", "not configured", "The inbox is empty", "parser is busy", "already seen"]) {
+      expect(CLIENT_SCRIPT).toContain(text);
+    }
+    expect(CLIENT_SCRIPT).not.toContain("Sweep done: ");
   });
 });
