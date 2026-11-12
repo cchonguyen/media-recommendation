@@ -106,4 +106,18 @@ describe("parseLines", () => {
     ).rejects.toMatchObject({ status: 503 });
     expect(n).toBe(1);
   });
+
+  it("names the Workers AI reason when both parsers fail", async () => {
+    const bad = (async () => new Response(JSON.stringify({ error: { message: "quota" } }), { status: 429 })) as typeof fetch;
+    const empty = ai(async () => ({ response: { items: [item({ mediaType: "Anime" })] } }));
+    const e1 = await parseLines({ lines, env: { AI: empty.binding, GEMINI_API_KEY: GEMINI_KEY }, fetchImpl: bad }).catch((e: unknown) => e);
+    expect(e1).toMatchObject({ name: "GeminiError", status: 429 });
+    expect((e1 as GeminiError).detail).toContain("quota");
+    expect((e1 as GeminiError).detail).toContain('bad mediaType "Anime"');
+    const boom = ai(async () => {
+      throw new Error("JSON Mode couldn't be met");
+    });
+    const e2 = await parseLines({ lines, env: { AI: boom.binding, GEMINI_API_KEY: GEMINI_KEY }, fetchImpl: bad, sleep: async () => {} }).catch((e: unknown) => e);
+    expect((e2 as GeminiError).detail).toContain("JSON Mode couldn't be met");
+  });
 });

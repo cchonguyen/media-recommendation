@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
-import { activityLog, intakeLog, mediaItems } from "../db/schema";
+import { activityLog, intakeLog, mediaItems, systemKv } from "../db/schema";
 import { createSubrequestBudget } from "../google/api";
 import { jsonResponse } from "../google/test-helpers";
 import { MAX_LINES_PER_RUN, hashLine, normalizeLine, splitLines } from "./lines";
 import { pacificDayAndHour } from "./pacific";
 import { GEMINI_RETRY_DELAYS_MS, GeminiError, parseLinesWithGemini, validateGeminiItems } from "./gemini";
-import { ingestRawLines, unionNames } from "./ingest";
+import { PARSE_DIAG_KEY, ingestRawLines, unionNames } from "./ingest";
 import { FIXED_NOW, GEMINI_KEY, echoGemini, geminiBody, geminiFetch, item, seed, setup } from "./test-fixtures";
 
 const env = { GEMINI_API_KEY: GEMINI_KEY };
@@ -64,7 +64,7 @@ describe("validateGeminiItems", () => {
   });
 
   it("returns nothing for a malformed envelope", () => {
-    expect(validateGeminiItems({ nope: 1 }, 3)).toEqual({ items: [], rejected: 0 });
+    expect(validateGeminiItems({ nope: 1 }, 3)).toEqual({ items: [], rejected: 0, reasons: ["response has no items array"] });
   });
 });
 
@@ -251,6 +251,16 @@ describe("ingestRawLines", () => {
     expect(await db.select().from(intakeLog)).toHaveLength(0);
     await ingestRawLines(deps(db, f.fetchImpl), ["remember to call mom"], "gdoc");
     expect(f.calls).toHaveLength(2);
+  });
+
+  it("saves the last parser diagnostic to system_kv when parsing fails or rejects", async () => {
+    const { db } = setup();
+    const down = geminiFetch(jsonResponse({ error: { message: "quota" } }, 429));
+    await expect(ingestRawLines(deps(db, down.fetchImpl), ["x"], "gdoc")).rejects.toBeInstanceOf(GeminiError);
+    const row = (await db.select().from(systemKv).where(eq(systemKv.key, PARSE_DIAG_KEY)))[0]!;
+    expect(JSON.parse(row.value)).toMatchObject({ lines: 1, source: "gdoc" });
+    expect(JSON.parse(row.value).diag).toContain("FAILED");
+    expect(row.value).not.toContain(GEMINI_KEY);
   });
 
   it("counts rejected items", async () => {

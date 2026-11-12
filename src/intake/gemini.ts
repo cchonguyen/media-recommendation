@@ -104,15 +104,18 @@ function str(v: unknown, max: number): string | null {
 export function validateGeminiItems(
   raw: unknown,
   lineCount: number,
-): { items: ParsedItem[]; rejected: number } {
+): { items: ParsedItem[]; rejected: number; reasons: string[] } {
   const list = (raw as { items?: unknown } | null)?.items;
-  if (!Array.isArray(list)) return { items: [], rejected: 0 };
+  if (!Array.isArray(list)) return { items: [], rejected: 0, reasons: ["response has no items array"] };
   const items: ParsedItem[] = [];
+  const reasons: string[] = [];
+  const show = (v: unknown) => JSON.stringify(v ?? null).slice(0, 40);
   let rejected = 0;
   for (const entry of list) {
     const r = entry as Record<string, unknown> | null;
     if (!r || typeof r !== "object") {
       rejected++;
+      reasons.push("item is not an object");
       continue;
     }
     const title = typeof r.title === "string" ? r.title.trim() : "";
@@ -136,6 +139,20 @@ export function validateGeminiItems(
       !ratingOk
     ) {
       rejected++;
+      const why = !title || title.length > 300
+        ? `title ${show(r.title)}`
+        : !(MEDIA_TYPES as readonly unknown[]).includes(r.mediaType)
+          ? `mediaType ${show(r.mediaType)}`
+          : !isIntInRange(r.lineIndex, 0, lineCount - 1)
+            ? `lineIndex ${show(r.lineIndex)} of ${lineCount} lines`
+            : notes === null || alt === null
+              ? "notes too long or not text"
+              : !yearOk
+                ? `yearHint ${show(r.yearHint)}`
+                : !consumedOk
+                  ? `consumedYear ${show(r.consumedYear)}`
+                  : `myRating ${show(r.myRating)}`;
+      reasons.push(`"${title.slice(0, 40)}": bad ${why}`);
       continue;
     }
     const tw = typeof r.trustWeight === "number" && Number.isFinite(r.trustWeight) ? Math.round(r.trustWeight) : 3;
@@ -154,7 +171,7 @@ export function validateGeminiItems(
       alternativeMatchesNote: alt,
     });
   }
-  return { items, rejected };
+  return { items, rejected, reasons };
 }
 
 export interface ParseInput {
