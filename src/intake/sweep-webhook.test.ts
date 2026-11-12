@@ -134,6 +134,16 @@ describe("sweepInboxDoc", () => {
     expect(geminiCalls(s.f)).toHaveLength(2);
   });
 
+  it("reprocesses lines a buggy earlier run logged as seen without saving them", async () => {
+    const s = await sweepSetup([HEADER, "Dune"]);
+    const { hashLine } = await import("./lines");
+    await s.db.insert(intakeLog).values({ lineHash: await hashLine("Dune"), rawLine: "Dune", source: "gdoc", createdAt: "2026-11-12T16:00:00.000Z" });
+    const r = await s.run();
+    expect(r).toMatchObject({ cleared: true, ingest: { created: 1, accepted: 1, skippedDuplicates: 0 } });
+    expect((await s.db.select().from(mediaItems)).map((x) => x.title)).toEqual(["T:Dune"]);
+    expect(await s.db.select().from(intakeLog)).toHaveLength(1);
+  });
+
   it("sends no delete and rethrows when Gemini fails", async () => {
     const s = await sweepSetup([HEADER, "Dune"], { gemini: jsonResponse({}, 503) });
     await expect(s.run()).rejects.toMatchObject({ name: "GeminiError", status: 503 });

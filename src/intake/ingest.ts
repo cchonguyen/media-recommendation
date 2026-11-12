@@ -113,10 +113,21 @@ export async function ingestRawLines(
   if (candidates.length === 0) return empty();
 
   const known = await db
-    .select({ hash: intakeLog.lineHash })
+    .select({ hash: intakeLog.lineHash, rawLine: intakeLog.rawLine })
     .from(intakeLog)
     .where(inArray(intakeLog.lineHash, candidates.map((c) => c.hash)));
-  const knownSet = new Set(known.map((k) => k.hash));
+  // A logged line only counts as seen if its item exists. Older buggy sweeps logged lines that were
+  // never saved; those are reprocessed so they heal instead of being skipped and deleted.
+  const loggedHashes = new Set(known.map((k) => k.hash));
+  const savedRaw = new Set<string>();
+  if (known.length > 0) {
+    const rows = await db
+      .select({ raw: mediaItems.rawInput })
+      .from(mediaItems)
+      .where(inArray(mediaItems.rawInput, known.map((k) => k.rawLine)));
+    for (const r of rows) savedRaw.add(r.raw);
+  }
+  const knownSet = new Set(known.filter((k) => savedRaw.has(k.rawLine)).map((k) => k.hash));
   const fresh = candidates.filter((c) => !knownSet.has(c.hash));
   skippedDuplicates += candidates.length - fresh.length;
   if (fresh.length === 0) return empty();
@@ -269,7 +280,9 @@ export async function ingestRawLines(
   const unparsedSet = new Set(unparsedLines);
   for (const f of fresh) {
     if (unparsedSet.has(f.raw)) continue;
-    stmts.push(db.insert(intakeLog).values({ lineHash: f.hash, rawLine: f.raw, source, createdAt: nowIso }));
+    const entry = db.insert(intakeLog).values({ lineHash: f.hash, rawLine: f.raw, source, createdAt: nowIso });
+    // Only a stale entry from an earlier run may be overwritten; a concurrent run's entry must still conflict.
+    stmts.push(loggedHashes.has(f.hash) ? entry.onConflictDoNothing() : entry);
   }
 
   if (stmts.length === 0) {
@@ -281,12 +294,12 @@ export async function ingestRawLines(
   } catch (err) {
     // D1 batches are transactional: a concurrent run that logged any of these lines fails the
     // whole batch. If every hash is now present, that run did the work.
-    const now2 = await db
-      .select({ hash: intakeLog.lineHash })
-      .from(intakeLog)
-      .where(inArray(intakeLog.lineHash, fresh.filter((f) => !unparsedSet.has(f.raw)).map((f) => f.hash)));
-    if (now2.length === fresh.length - unparsedLines.length) {
-      return { ...empty(), skippedDuplicates: skippedDuplicates + fresh.length };
+    const newHashes = fresh.filter((f) => !unparsedSet.has(f.raw) && !loggedHashes.has(f.hash)).map((f) => f.hash);
+    if (newHashes.length > 0) {
+      const now2 = await db.select({ hash: intakeLog.lineHash }).from(intakeLog).where(inArray(intakeLog.lineHash, newHashes));
+      if (now2.length === newHashes.length) {
+        return { ...empty(), skippedDuplicates: skippedDuplicates + fresh.length };
+      }
     }
     throw err;
   }
