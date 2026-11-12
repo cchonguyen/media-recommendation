@@ -7,7 +7,7 @@ import type { AiBinding } from "./types";
 
 function ai(run: AiBinding["run"]) {
   const calls: unknown[] = [];
-  return { binding: { run: async (m: string, i: unknown) => (calls.push([m, i]), run(m, i)) } as AiBinding, calls };
+  return { binding: { run: async (m: string, i: unknown, o?: unknown) => (calls.push([m, i, o]), run(m, i, o as never)) } as AiBinding, calls };
 }
 function gemini() {
   let n = 0;
@@ -160,5 +160,8 @@ describe("parseLines", () => {
     expect(out.items[0]!.title).toBe("Second");
     expect(g.count()).toBe(0);
     expect((a.calls[1] as [string, { response_format: unknown }])[1].response_format).toEqual({ type: "json_object" });
+    const opts = { gateway: { id: "default", skipCache: true } };
+    expect((a.calls[0] as unknown[])[2]).toEqual(opts);
+    expect((a.calls[1] as unknown[])[2]).toEqual(opts);
   });
 });

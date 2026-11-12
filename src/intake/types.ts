@@ -3,7 +3,7 @@ import type { Db } from "../google/token";
 
 /** Cloudflare Workers AI binding, reduced to the one call used here. */
 export interface AiBinding {
-  run(model: string, input: unknown): Promise<unknown>;
+  run(model: string, input: unknown, options?: { gateway?: { id: string; skipCache?: boolean } }): Promise<unknown>;
 }
 
 export interface IntakeEnv {
