@@ -6,6 +6,8 @@ import { MEDIA_TYPES, STATUSES, TIERS, mediaItems } from "../db/schema";
 import type { MediaItem } from "../db/schema";
 import { isMediaType, isStatus } from "../api/validate";
 import { Layout, loadStatusStrip } from "./layout";
+import { Icon } from "./icons";
+import { Field, Missing, SelectBox } from "./controls";
 
 export const PAGE_SIZE = 50;
 
@@ -88,7 +90,7 @@ function SortTh(props: { base: string; p: Params; col: SortKey; label: string })
     <th aria-sort={sorted ? (p.dir === "asc" ? "ascending" : "descending") : undefined}>
       <a href={href(props.base, p, { sort: col, dir: next, page: 1 })}>
         {props.label}
-        {sorted ? (p.dir === "asc" ? " ▲" : " ▼") : ""}
+        {sorted ? <Icon name={p.dir === "asc" ? "arrow-up" : "arrow-down"} /> : null}
       </a>
     </th>
   );
@@ -97,8 +99,8 @@ function SortTh(props: { base: string; p: Params; col: SortKey; label: string })
 function RatingCell(props: { i: MediaItem }) {
   const { i } = props;
   return (
-    <div class="rating-cell" data-id={i.id}>
-      <select data-action="rating" data-id={i.id} aria-label={`Rating for ${i.title}`}>
+    <div class="rating-cell app-actions" data-id={i.id}>
+      <SelectBox label={`Rating for ${i.title}`} attrs={{ "data-action": "rating", "data-id": i.id }}>
         <option value="" selected={i.myRating === null}>
           -
         </option>
@@ -107,8 +109,8 @@ function RatingCell(props: { i: MediaItem }) {
             {r.toFixed(1)}
           </option>
         ))}
-      </select>{" "}
-      <select data-action="tier" data-id={i.id} aria-label={`Tier for ${i.title}`}>
+      </SelectBox>
+      <SelectBox label={`Tier for ${i.title}`} attrs={{ "data-action": "tier", "data-id": i.id }}>
         <option value="" selected={i.personalTier === null}>
           -
         </option>
@@ -117,7 +119,7 @@ function RatingCell(props: { i: MediaItem }) {
             {t}
           </option>
         ))}
-      </select>
+      </SelectBox>
     </div>
   );
 }
@@ -125,32 +127,32 @@ function RatingCell(props: { i: MediaItem }) {
 function StatusSelect(props: { i: MediaItem }) {
   const { i } = props;
   return (
-    <select data-action="set-status" data-id={i.id} aria-label={`Status for ${i.title}`}>
+    <SelectBox label={`Status for ${i.title}`} attrs={{ "data-action": "set-status", "data-id": i.id }}>
       {STATUSES.filter((s) => s !== "Archived" || i.status === "Archived").map((s) => (
         <option value={s} selected={s === i.status}>
           {s}
         </option>
       ))}
-    </select>
+    </SelectBox>
   );
 }
 
 function TypeSelect(props: { i: MediaItem }) {
   const { i } = props;
   return (
-    <select data-action="set-type" data-id={i.id} aria-label={`Type for ${i.title}`}>
+    <SelectBox label={`Type for ${i.title}`} attrs={{ "data-action": "set-type", "data-id": i.id }}>
       {MEDIA_TYPES.map((t) => (
         <option value={t} selected={t === i.mediaType}>
           {t}
         </option>
       ))}
-    </select>
+    </SelectBox>
   );
 }
 
 function TitleInput(props: { i: MediaItem }) {
   const { i } = props;
-  return <input type="text" data-action="title" data-id={i.id} value={i.title} maxlength={300} aria-label={`Title of ${i.title}`} />;
+  return <input class="ui-input" type="text" data-action="title" data-id={i.id} value={i.title} maxlength={300} aria-label={`Title of ${i.title}`} />;
 }
 
 function LibraryRow(props: { i: MediaItem }) {
@@ -166,19 +168,19 @@ function LibraryRow(props: { i: MediaItem }) {
       <td>
         <TypeSelect i={i} />
       </td>
-      <td>{i.releaseYear ?? ""}</td>
-      <td>{i.creator}</td>
+      <td>{i.releaseYear ?? <Missing />}</td>
+      <td>{i.creator || <Missing />}</td>
       <td>
         <RatingCell i={i} />
       </td>
-      <td>{i.criticScoreDisplay}</td>
-      <td>{i.timeCommitmentDisplay}</td>
+      <td>{i.criticScoreDisplay || <Missing />}</td>
+      <td>{i.timeCommitmentDisplay || <Missing />}</td>
       <td>{i.releaseAccessDisplay}</td>
       <td>
-        <input type="text" data-action="notes" data-id={i.id} value={i.personalNotes} maxlength={10000} aria-label={`Notes for ${i.title}`} />
+        <input class="ui-input" type="text" data-action="notes" data-id={i.id} value={i.personalNotes} maxlength={10000} aria-label={`Notes for ${i.title}`} />
       </td>
       <td>
-        <button type="button" data-action="archive" data-id={i.id} aria-label={`Archive ${i.title}`}>
+        <button type="button" class="ui-btn ui-btn--ghost" data-action="archive" data-id={i.id} aria-label={`Archive ${i.title}`}>
           Archive
         </button>
       </td>
@@ -197,8 +199,8 @@ function ArchiveRow(props: { i: MediaItem }) {
       <td>
         <TypeSelect i={i} />
       </td>
-      <td>{i.consumedYear ?? ""}</td>
-      <td>{i.completedAt ? i.completedAt.slice(0, 10) : ""}</td>
+      <td>{i.consumedYear ?? <Missing />}</td>
+      <td>{i.completedAt ? i.completedAt.slice(0, 10) : <Missing text="No date yet" />}</td>
       <td>
         <RatingCell i={i} />
       </td>
@@ -210,17 +212,17 @@ function ArchiveRow(props: { i: MediaItem }) {
 function Pager(props: { base: string; p: Params; total: number; pages: number; shown: number }) {
   const { base, p, total, pages, shown } = props;
   return (
-    <div class="pager">
-      <span>
+    <div class="app-pager">
+      <span class="ui-data">
         {total === 0 ? "0 rows" : `Showing ${shown} of ${total} rows`} (page {p.page} of {pages})
       </span>
       {p.page > 1 ? (
-        <a rel="prev" href={href(base, p, { page: p.page - 1 })}>
+        <a class="ui-btn" rel="prev" href={href(base, p, { page: p.page - 1 })}>
           Previous
         </a>
       ) : null}
       {p.page < pages ? (
-        <a rel="next" href={href(base, p, { page: p.page + 1 })}>
+        <a class="ui-btn" rel="next" href={href(base, p, { page: p.page + 1 })}>
           Next
         </a>
       ) : null}
@@ -267,44 +269,70 @@ export function createLibraryRoutes(options: { now?: () => Date } = {}) {
     const filtered = Boolean(p.q || p.status || p.type || p.year);
     const th = (col: SortKey, label: string) => <SortTh base={base} p={p} col={col} label={label} />;
     return c.html(
-      <Layout active={slug} status={status} title={heading}>
-        <h1>{heading}</h1>
-        <form class="filters" method="get" action={base}>
-          <input type="text" name="q" value={p.q} placeholder="Search title" aria-label="Search title" maxlength={100} />
+      <Layout active={slug} status={status} title={heading} heading={heading}>
+        {archive ? null : (
+          <nav class="app-subnav" aria-label="Library sections">
+            {Object.entries(TYPE_ROUTES).map(([k, r]) => {
+              const current = k === slug;
+              return (
+                <a href={`/library/${k}`} class={current ? "ui-pill ui-pill--active" : "ui-pill"} aria-current={current ? "page" : undefined}>
+                  {current ? <Icon name="check" /> : null}
+                  {r.label}
+                </a>
+              );
+            })}
+          </nav>
+        )}
+        <form class="app-form" method="get" action={base}>
+          <Field id="q" label="Search title">
+            <input class="ui-input" id="q" type="text" name="q" value={p.q} placeholder="Search title" maxlength={100} />
+          </Field>
           {archive ? (
             <>
-              <select name="type" aria-label="Type filter">
-                <option value="">All types</option>
-                {MEDIA_TYPES.map((t) => (
-                  <option value={t} selected={t === p.type}>
-                    {t}
-                  </option>
-                ))}
-              </select>
-              <input type="text" name="consumed_year" value={p.year} placeholder="Year" aria-label="Consumed year" inputmode="numeric" maxlength={4} size={5} />
+              <Field id="f-type" label="Type">
+                <SelectBox id="f-type" name="type">
+                  <option value="">All types</option>
+                  {MEDIA_TYPES.map((t) => (
+                    <option value={t} selected={t === p.type}>
+                      {t}
+                    </option>
+                  ))}
+                </SelectBox>
+              </Field>
+              <Field id="f-year" label="Consumed year">
+                <input class="ui-input" id="f-year" type="text" name="consumed_year" value={p.year} placeholder="Year" inputmode="numeric" maxlength={4} />
+              </Field>
             </>
           ) : (
-            <select name="status" aria-label="Status filter">
-              <option value="">Active statuses</option>
-              {STATUSES.map((s) => (
-                <option value={s} selected={s === p.status}>
-                  {s}
-                </option>
-              ))}
-            </select>
+            <Field id="f-status" label="Status">
+              <SelectBox id="f-status" name="status">
+                <option value="">Active statuses</option>
+                {STATUSES.map((s) => (
+                  <option value={s} selected={s === p.status}>
+                    {s}
+                  </option>
+                ))}
+              </SelectBox>
+            </Field>
           )}
           <input type="hidden" name="sort" value={p.sort} />
           <input type="hidden" name="dir" value={p.dir} />
-          <button type="submit">Filter</button>
-          {filtered ? <a href={base}>Clear</a> : null}
+          <button type="submit" class="ui-btn">
+            Filter
+          </button>
+          {filtered ? (
+            <a class="ui-btn ui-btn--ghost" href={base}>
+              Clear
+            </a>
+          ) : null}
         </form>
-        <p class="meta">Editing a title to the form &quot;Title (2021)&quot; sets the year hint and re-runs enrichment for that item.</p>
+        <p class="ui-help">Editing a title to the form &quot;Title (2021)&quot; sets the year hint and re-runs enrichment for that item.</p>
         {rows.length === 0 ? (
-          <p class="empty">{filtered ? "No items match these filters." : "Nothing here yet."}</p>
+          <p class="app-empty ui-missing">{filtered ? "No items match these filters." : "Nothing here yet."}</p>
         ) : (
-          <div class="tablewrap">
-            <table class="lib">
-              <caption class="meta" style="text-align:left;padding:.3rem .5rem">
+          <div class="table-scroll ui-card">
+            <table class="app-table">
+              <caption>
                 {heading} table
               </caption>
               <thead>
@@ -329,9 +357,7 @@ export function createLibraryRoutes(options: { now?: () => Date } = {}) {
                     <th>Time</th>
                     <th>Access</th>
                     <th>Notes</th>
-                    <th>
-                      <span class="meta">Actions</span>
-                    </th>
+<th>Actions</th>
                   </tr>
                 )}
               </thead>
@@ -351,9 +377,8 @@ export function createLibraryRoutes(options: { now?: () => Date } = {}) {
     if (!Object.prototype.hasOwnProperty.call(TYPE_ROUTES, slug)) {
       const status = await loadStatusStrip(c.env.DB, nowFn());
       return c.html(
-        <Layout active="" status={status} title="Not found">
-          <h1>Not found</h1>
-          <p class="empty">There is no library section called that. Use the tabs above.</p>
+        <Layout active="" status={status} title="Not found" heading="Not found">
+          <p class="app-empty ui-missing">There is no library section called that. Use the tabs above.</p>
         </Layout>,
         404,
       );

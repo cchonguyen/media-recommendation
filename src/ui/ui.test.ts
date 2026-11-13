@@ -109,10 +109,22 @@ describe("Library UI", () => {
       const res = await h.get(`/library/${slug}`);
       expect(res.status).toBe(200);
       const html = await res.text();
-      expect(html).toContain(`<h1>${heading}</h1>`);
-      // Sidebar links only Library (movies) and Completed Archive; the other pill links arrive with the sub-nav in Slice 23.6.
-      if (slug === "movies" || slug === "completed") expect(html).toContain(`href="/library/${slug}"`);
+      expect(html).toMatch(new RegExp(`<h1[^>]*>${heading}</h1>`));
+      expect(html).toContain(`href="/library/${slug}"`);
+      expect(html).not.toContain('class="tablewrap"');
+      expect(html).not.toContain('table class="lib"');
+      if (slug === "completed") expect(html).not.toContain("Library sections");
+      else for (const s of ["movies", "tv", "books", "games", "podcasts", "one-offs"]) expect(html).toContain(`href="/library/${s}"`);
     }
+  });
+
+  it("type page shows the pill sub-nav with the current pill marked", async () => {
+    const h = await lib();
+    const html = await (await h.get("/library/movies")).text();
+    expect(html).toContain(`<nav class="app-subnav"`);
+    expect(html).toContain('aria-current="page"');
+    expect(html).toContain("ui-pill--active");
+    expect(html).toContain("table-scroll");
   });
 
   it("returns 404 with layout for unknown type", async () => {
