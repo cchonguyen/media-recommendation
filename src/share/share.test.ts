@@ -88,6 +88,11 @@ describe("GET /share/:slug", () => {
     expect(body).toContain('href="https://www.themoviedb.org"');
     expect(body).toContain('href="https://www.justwatch.com"');
     expect(body).not.toContain("<script");
+    expect(body).toContain('data-accent="azure"');
+    expect(body).toContain("ui-card");
+    expect(body).not.toContain("fonts.googleapis.com");
+    expect(body).not.toContain("<link");
+    expect(body.match(/<h1[ >]/g)?.length).toBe(1);
   });
 
   it("sets the security headers", async () => {

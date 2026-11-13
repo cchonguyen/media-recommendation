@@ -3,6 +3,7 @@ import { raw } from "hono/html";
 import { and, asc, eq, ne } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import { curatedListItems, curatedLists, mediaItems } from "../db/schema";
+import { STYLES } from "../ui/styles";
 
 // Public, read-only page. /share/* is a Cloudflare Access bypass path configured
 // OUTSIDE the app (invariant 8). The app does no auth here, so this file must
@@ -22,44 +23,24 @@ const HEADERS: Record<string, string> = {
     "default-src 'none'; img-src https:; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
 };
 
-const CSS = `
-:root{--bg:#f6f6f4;--fg:#1c1c1e;--muted:#6b6b70;--card:#fff;--line:#dcdcd6;--accent:#2457c5}
-@media (prefers-color-scheme:dark){:root{--bg:#141416;--fg:#ececee;--muted:#9a9aa2;--card:#1f1f23;--line:#33333a;--accent:#7aa2ff}}
-*{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.5 system-ui,sans-serif}
-main{max-width:44rem;margin:0 auto;padding:1.2rem 1rem}
-h1{font-size:1.6rem;margin:.2rem 0 .4rem}
-.desc{color:var(--muted);margin:0 0 1.2rem}
-ol{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:.7rem}
-li{display:flex;gap:.8rem;background:var(--card);border:1px solid var(--line);border-radius:.6rem;padding:.7rem}
-.rank{font-weight:700;color:var(--accent);min-width:1.8rem;font-size:1.2rem}
-li img{width:60px;height:90px;object-fit:cover;border-radius:.3rem}
-.t{font-weight:600}
-.meta{color:var(--muted);font-size:.88rem}
-.blurb{margin:.3rem 0 0}
-.empty{color:var(--muted);font-style:italic}
-footer{max-width:44rem;margin:0 auto;padding:1rem;color:var(--muted);font-size:.8rem;border-top:1px solid var(--line)}
-footer a{color:var(--accent)}
-`;
-
 function Page(props: { title: string; children: unknown }) {
   return (
     <>
       {raw("<!doctype html>")}
-      <html lang="en">
+      <html lang="en" data-accent="azure" data-density="comfortable">
         <head>
           <meta charset="utf-8" />
           <meta name="viewport" content="width=device-width, initial-scale=1" />
           <meta name="robots" content="noindex, nofollow" />
           <title>{props.title}</title>
-          <style>{raw(CSS)}</style>
+          <style>{raw(STYLES)}</style>
         </head>
         <body>
-          <main>{props.children as never}</main>
-          <footer>
-            Movie and TV data from <a href="https://www.themoviedb.org">TMDB</a>. This product uses the TMDB API but is
+          <main class="share-page">{props.children as never}</main>
+          <footer class="share-foot">
+            Movie and TV data from <a class="ui-link" href="https://www.themoviedb.org">TMDB</a>. This product uses the TMDB API but is
             not endorsed or certified by TMDB. Streaming availability data provided by{" "}
-            <a href="https://www.justwatch.com">JustWatch</a>.
+            <a class="ui-link" href="https://www.justwatch.com">JustWatch</a>.
           </footer>
         </body>
       </html>
@@ -70,8 +51,8 @@ function Page(props: { title: string; children: unknown }) {
 function NotFound() {
   return (
     <Page title="Not found">
-      <h1>Not found</h1>
-      <p class="desc">This page does not exist.</p>
+      <h1 class="ui-display app-title">Not found</h1>
+      <p class="ui-muted">This page does not exist.</p>
     </Page>
   );
 }
@@ -118,31 +99,33 @@ export function createShareRoutes() {
 
     return c.html(
       <Page title={list.title}>
-        <h1>{list.title}</h1>
-        {list.description ? <p class="desc">{list.description}</p> : null}
+        <h1 class="ui-display app-title">{list.title}</h1>
+        {list.description ? <p class="ui-muted">{list.description}</p> : null}
         {items.length === 0 ? (
-          <p class="empty">This list is empty.</p>
+          <p class="ui-missing">This list is empty.</p>
         ) : (
-          <ol>
+          <ol class="app-list">
             {items.map((i, n) => (
-              <li>
-                <span class="rank">{n + 1}</span>
+              <li class="ui-card share-item">
+                <span class="share-rank">{n + 1}</span>
                 {i.posterImageUrl.startsWith("https://") ? (
-                  <img src={i.posterImageUrl} alt="" loading="lazy" width="60" height="90" referrerpolicy="no-referrer" />
+                  <img class="app-poster" src={i.posterImageUrl} alt="" loading="lazy" width="60" height="90" referrerpolicy="no-referrer" />
                 ) : null}
-                <div>
-                  <div class="t">{i.title}</div>
-                  <div class="meta">
+                <div class="app-card-body">
+                  <div>
+                    <strong>{i.title}</strong>
+                  </div>
+                  <div class="ui-muted">
                     {[i.creator, i.releaseYear === null ? "" : String(i.releaseYear)].filter(Boolean).join(" · ")}
                   </div>
                   {i.myRating !== null || i.personalTier ? (
-                    <div class="meta">
+                    <div class="ui-data">
                       {i.myRating !== null ? `Rating ${i.myRating}` : ""}
                       {i.myRating !== null && i.personalTier ? " · " : ""}
                       {i.personalTier ? `Tier ${i.personalTier}` : ""}
                     </div>
                   ) : null}
-                  {i.blurb ? <p class="blurb">{i.blurb}</p> : null}
+                  {i.blurb ? <p>{i.blurb}</p> : null}
                 </div>
               </li>
             ))}
