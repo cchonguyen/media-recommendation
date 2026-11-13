@@ -50,6 +50,20 @@ describe("Now & Next UI", () => {
   });
 });
 
+describe("AppShell layout", () => {
+  it("renders the shell with accent, density, sidebar, tab bar and containers", async () => {
+    const html = await (await harness().get("/")).text();
+    for (const s of ['data-accent="azure"', 'data-density="comfortable"', 'class="ui-sidebar"', 'class="ui-tabbar"', 'aria-current="page"', 'id="toasts"', 'id="notices"', "fonts.googleapis.com"]) {
+      expect(html).toContain(s);
+    }
+    // The kit CSS itself mentions data-theme selectors, so check the attribute on the tags only.
+    expect(html.slice(0, html.indexOf("<head>"))).not.toContain("data-theme");
+    expect(html).not.toContain('id="toast"');
+    // The kit CSS also mentions the attribute, so count in the body only: sidebar plus tab bar.
+    expect(html.slice(html.indexOf("<body>")).split('aria-current="page"').length - 1).toBe(2);
+  });
+});
+
 describe("Backup button", () => {
   it("is enabled and shows the last backup time", async () => {
     const h = harness();
@@ -88,7 +102,8 @@ describe("Library UI", () => {
       expect(res.status).toBe(200);
       const html = await res.text();
       expect(html).toContain(`<h1>${heading}</h1>`);
-      expect(html).toContain(`href="/library/${slug}"`);
+      // Sidebar links only Library (movies) and Completed Archive; the other pill links arrive with the sub-nav in Slice 23.6.
+      if (slug === "movies" || slug === "completed") expect(html).toContain(`href="/library/${slug}"`);
     }
   });
 
