@@ -187,11 +187,15 @@ describe("Lists UI", () => {
     const res = await h.get("/lists");
     expect(res.status).toBe(200);
     const html = await res.text();
-    for (const s of ["<h1>Lists</h1>", "Create List", "Draft List with AI", "Generate", 'data-action="list-create"', 'data-action="draft"', 'data-share-slug="my-list"', "Copy", "/lists/lst_abc123", "Delete"]) {
+    for (const s of ["Create List", "Draft List with AI", "Generate", 'data-action="list-create"', 'data-action="draft"', 'data-share-slug="my-list"', "Copy", "/lists/lst_abc123", "Delete"]) {
       expect(html).toContain(s);
     }
     expect(html).not.toContain("<b>My List</b>");
     expect(html).toContain("&lt;b&gt;My List&lt;/b&gt;");
+    expect(html).toMatch(/<h1[^>]*>Lists<\/h1>/);
+    expect(html).toContain('role="switch"');
+    expect(html).toContain("ui-switch__state");
+    for (const s of ['class="row"', 'class="rate"', "style="]) expect(html).not.toContain(s);
   });
 
   it("renders the edit page without archived items, and 404s unknown ids", async () => {
@@ -203,6 +207,8 @@ describe("Lists UI", () => {
     for (const s of ["Add items", 'data-action="list-save"', 'data-action="row-up"', "Delete list", 'data-action="pick"']) {
       expect(html).toContain(s);
     }
+    expect(html).toContain('aria-label="Move up"');
+    for (const s of ['class="row"', 'class="rate"', "style="]) expect(html).not.toContain(s);
     const nf = await h.get("/lists/lst_nope00");
     expect(nf.status).toBe(404);
     expect(await nf.text()).toContain("List not found");
