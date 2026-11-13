@@ -304,6 +304,7 @@ describe("design system guards", () => {
   });
 
   it("in-row selects are compact and Rating/Tier sit side by side", () => {
+    expect(STYLES).toContain(".ui-select{min-height:var(--touch-desktop);font-size:14px");
     expect(STYLES).toContain(".app-table .rating-cell{display:flex;flex-wrap:nowrap");
     expect(STYLES).toContain(".app-table .ui-select,.app-table .ui-input{min-height:32px;font-size:13px");
   });
