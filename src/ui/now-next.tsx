@@ -6,6 +6,8 @@ import { MEDIA_TYPES, TIERS, mediaItems } from "../db/schema";
 import type { MediaItem } from "../db/schema";
 import { isMediaType } from "../api/validate";
 import { Layout, loadStatusStrip } from "./layout";
+import { Field, Missing, Pill, SelectBox } from "./controls";
+import { Icon } from "./icons";
 import { createLibraryRoutes } from "./library";
 import { createListsUiRoutes } from "./lists";
 
@@ -48,9 +50,10 @@ function safeImg(url: string): string | null {
   return /^https?:\/\//i.test(url) ? url : null;
 }
 
-function StatusButton(props: { id: string; status: string; label: string; primary?: boolean }) {
+function StatusButton(props: { id: string; status: string; label: string; icon?: "play" | "pause"; ghost?: boolean }) {
   return (
-    <button type="button" class={props.primary ? "primary" : ""} data-action="status" data-id={props.id} data-status={props.status}>
+    <button type="button" class={props.ghost ? "ui-btn ui-btn--ghost" : "ui-btn"} data-action="status" data-id={props.id} data-status={props.status}>
+      {props.icon ? <Icon name={props.icon} /> : null}
       {props.label}
     </button>
   );
@@ -59,30 +62,31 @@ function StatusButton(props: { id: string; status: string; label: string; primar
 const RATINGS = Array.from({ length: 9 }, (_, i) => 1 + i * 0.5);
 
 function RateForm(props: { id: string; action: "complete" | "rate"; label: string; hidden?: boolean }) {
+  const base = `rate-${props.id}`;
   return (
-    <form class="rate" id={`rate-${props.id}`} data-action={props.action} data-id={props.id} hidden={props.hidden}>
-      <label>
-        Rating{" "}
-        <select name="rating" required>
+    <form class="app-stack" id={base} data-action={props.action} data-id={props.id} hidden={props.hidden}>
+      <Field id={`${base}-rating`} label="Rating">
+        <SelectBox id={`${base}-rating`} name="rating" required>
           {RATINGS.map((r) => (
             <option value={String(r)} selected={r === 3}>
               {r.toFixed(1)}
             </option>
           ))}
-        </select>
-      </label>
-      <label>
-        Tier{" "}
-        <select name="tier">
-          <option value="">(none)</option>
+        </SelectBox>
+      </Field>
+      <Field id={`${base}-tier`} label="Tier">
+        <SelectBox id={`${base}-tier`} name="tier">
+          <option value="">None</option>
           {TIERS.map((t) => (
             <option value={t}>{t}</option>
           ))}
-        </select>
-      </label>
-      <textarea name="review_text" rows={2} maxlength={10000} placeholder="Short note" />
-      <div>
-        <button type="submit" class="primary">
+        </SelectBox>
+      </Field>
+      <Field id={`${base}-note`} label="Short note">
+        <textarea class="ui-textarea" id={`${base}-note`} name="review_text" rows={2} maxlength={10000} placeholder="Add a short note (optional)" />
+      </Field>
+      <div class="app-actions">
+        <button type="submit" class="ui-btn">
           {props.label}
         </button>
       </div>
@@ -94,39 +98,40 @@ function ActiveCard(props: { item: MediaItem }) {
   const i = props.item;
   const img = safeImg(i.posterImageUrl);
   return (
-    <div class="card">
-      {img ? <img src={img} alt="" loading="lazy" width="56" height="84" /> : null}
-      <div class="body">
+    <article class="ui-card app-card-row">
+      {img ? <img class="app-poster" src={img} alt="" loading="lazy" width="56" height="84" /> : null}
+      <div class="app-card-body">
         <strong>{i.title}</strong>
-        <div class="meta">
-          <span class="pill">{i.mediaType}</span> {i.creator}
+        <div class="app-facts">
+          <Pill>{i.mediaType}</Pill>
+          {i.creator ? <span class="ui-muted">{i.creator}</span> : null}
         </div>
-        <div class="meta">{i.timeCommitmentDisplay || "Time unknown"}</div>
-        <div class="actions">
-          <StatusButton id={i.id} status="Paused" label="Pause" />
-          <button type="button" class="primary" data-action="toggle-rate" data-id={i.id}>
+        {i.timeCommitmentDisplay ? <span class="ui-data">{i.timeCommitmentDisplay}</span> : <Missing text="Length not known yet" />}
+        <div class="app-actions">
+          <StatusButton id={i.id} status="Paused" label="Pause" icon="pause" />
+          <button type="button" class="ui-btn" data-action="toggle-rate" data-id={i.id}>
             Complete &amp; Rate
           </button>
         </div>
       </div>
       <RateForm id={i.id} action="complete" label="Complete" hidden />
-    </div>
+    </article>
   );
 }
 
 function UpNextRow(props: { item: MediaItem }) {
   const i = props.item;
   return (
-    <div class="row">
-      <div class="t">{i.title}</div>
-      <span class="pill">{i.mediaType}</span>
-      <span class="meta">{i.releaseAccessDisplay}</span>
-      <span class="meta">{i.criticScoreDisplay}</span>
-      <span class="meta">{i.timeCommitmentDisplay}</span>
-      <span class="meta">Score {i.priorityScore.toFixed(1)}</span>
-      <div class="actions">
-        <StatusButton id={i.id} status="Active" label="Start" primary />
-        <StatusButton id={i.id} status="Backlog" label="Move to Backlog" />
+    <div class="ui-card app-row">
+      <div class="app-row__title">{i.title}</div>
+      <Pill>{i.mediaType}</Pill>
+      <span class="ui-data">{i.releaseAccessDisplay}</span>
+      {i.criticScoreDisplay ? <span class="ui-data">{i.criticScoreDisplay}</span> : <Missing text="No score yet" />}
+      {i.timeCommitmentDisplay ? <span class="ui-data">{i.timeCommitmentDisplay}</span> : <Missing text="Length not known yet" />}
+      <span class="ui-data">{`Score ${i.priorityScore.toFixed(1)}`}</span>
+      <div class="app-actions">
+        <StatusButton id={i.id} status="Active" label="Start" icon="play" />
+        <StatusButton id={i.id} status="Backlog" label="Move to Backlog" ghost />
       </div>
     </div>
   );
@@ -166,97 +171,134 @@ export function createUiRoutes(options: { now?: () => Date } = {}) {
 
     const filtered = Boolean(type || streaming || time);
     return c.html(
-      <Layout active="now" status={status} title="Now & Next">
-        <h1>Now &amp; Next</h1>
+      <Layout active="now" status={status} title="Now & Next" heading="Now & Next">
+        <section class="app-section" aria-labelledby="h-active">
+          <h2 class="ui-display app-h2" id="h-active">
+            Active
+          </h2>
+          {active.length === 0 ? (
+            <p class="app-empty ui-missing">Nothing active. Start something from Up Next.</p>
+          ) : (
+            <div class="app-cards">
+              {active.map((i) => (
+                <ActiveCard item={i} />
+              ))}
+            </div>
+          )}
+        </section>
 
-        <h2>Active</h2>
-        {active.length === 0 ? (
-          <p class="empty">Nothing active. Start something from Up Next.</p>
-        ) : (
-          <div class="cards">
-            {active.map((i) => (
-              <ActiveCard item={i} />
-            ))}
-          </div>
-        )}
-
-        <h2>Paused</h2>
-        {paused.length === 0 ? (
-          <p class="empty">Nothing paused.</p>
-        ) : (
-          <div class="list">
-            {paused.map((i) => (
-              <div class="row">
-                <div class="t">{i.title}</div>
-                <span class="pill">{i.mediaType}</span>
-                <span class="meta">paused {daysAgo(i.lastStatusChangeAt, now)} days ago</span>
-                <div class="actions">
-                  <StatusButton id={i.id} status="Active" label="Resume" primary />
+        <section class="app-section" aria-labelledby="h-paused">
+          <h2 class="ui-display app-h2" id="h-paused">
+            Paused
+          </h2>
+          {paused.length === 0 ? (
+            <p class="app-empty ui-missing">Nothing paused.</p>
+          ) : (
+            <div class="app-list">
+              {paused.map((i) => (
+                <div class="ui-card app-row">
+                  <div class="app-row__title">{i.title}</div>
+                  <Pill>{i.mediaType}</Pill>
+                  <span class="ui-data ui-muted">{`paused ${daysAgo(i.lastStatusChangeAt, now)} days ago`}</span>
+                  <div class="app-actions">
+                    <StatusButton id={i.id} status="Active" label="Resume" icon="play" />
+                  </div>
                 </div>
-              </div>
-            ))}
-          </div>
-        )}
+              ))}
+            </div>
+          )}
+        </section>
 
-        <h2>Up Next</h2>
-        <form class="filters" method="get" action="/">
-          <select name="type" aria-label="Type">
-            <option value="">All types</option>
-            {MEDIA_TYPES.map((t) => (
-              <option value={t} selected={t === type}>
-                {t}
-              </option>
-            ))}
-          </select>
-          <input type="text" name="streaming" value={streaming} placeholder="Streaming service" aria-label="Streaming service" maxlength={100} />
-          <select name="time" aria-label="Time commitment">
-            <option value="">Any length</option>
-            {TIME_BUCKETS.map((b) => (
-              <option value={b.value} selected={b.value === time}>
-                {b.label}
-              </option>
-            ))}
-          </select>
-          <button type="submit">Filter</button>
-          {filtered ? <a href="/">Clear</a> : null}
-        </form>
-        {upNext.length === 0 ? (
-          <p class="empty">{filtered ? "No Up Next items match these filters." : "Up Next is empty."}</p>
-        ) : (
-          <div class="list" style="margin-top:.6rem">
-            {upNext.map((i) => (
-              <UpNextRow item={i} />
-            ))}
-          </div>
-        )}
+        <section class="app-section" aria-labelledby="h-upnext">
+          <h2 class="ui-display app-h2" id="h-upnext">
+            Up Next
+          </h2>
+          <form class="app-form" method="get" action="/">
+            <Field id="f-type" label="Type">
+              <SelectBox id="f-type" name="type">
+                <option value="">All types</option>
+                {MEDIA_TYPES.map((t) => (
+                  <option value={t} selected={t === type}>
+                    {t}
+                  </option>
+                ))}
+              </SelectBox>
+            </Field>
+            <Field id="f-streaming" label="Streaming service">
+              <input class="ui-input" id="f-streaming" type="text" name="streaming" value={streaming} maxlength={100} placeholder="Any service" />
+            </Field>
+            <Field id="f-time" label="Time commitment">
+              <SelectBox id="f-time" name="time">
+                <option value="">Any length</option>
+                {TIME_BUCKETS.map((b) => (
+                  <option value={b.value} selected={b.value === time}>
+                    {b.label}
+                  </option>
+                ))}
+              </SelectBox>
+            </Field>
+            <button type="submit" class="ui-btn">
+              Filter
+            </button>
+            {filtered ? (
+              <a class="ui-btn ui-btn--ghost" href="/">
+                Clear
+              </a>
+            ) : null}
+          </form>
+          {upNext.length === 0 ? (
+            <p class="app-empty ui-missing">{filtered ? "No Up Next items match these filters." : "Up Next is empty."}</p>
+          ) : (
+            <div class="app-list">
+              {upNext.map((i) => (
+                <UpNextRow item={i} />
+              ))}
+            </div>
+          )}
+        </section>
 
-        <h2>Pending Review</h2>
-        {pending.length === 0 ? (
-          <p class="empty">No completed items waiting for a review.</p>
-        ) : (
-          <div class="list">
-            {pending.map((i) => (
-              <div class="row">
-                <div class="t">{i.title}</div>
-                <span class="pill">{i.mediaType}</span>
-                <RateForm id={i.id} action="rate" label="Save review" />
-              </div>
-            ))}
-          </div>
-        )}
+        <section class="app-section" aria-labelledby="h-pending">
+          <h2 class="ui-display app-h2" id="h-pending">
+            Pending Review
+          </h2>
+          {pending.length === 0 ? (
+            <p class="app-empty ui-missing">No completed items waiting for a review.</p>
+          ) : (
+            <div class="app-list">
+              {pending.map((i) => (
+                <div class="ui-card app-stack">
+                  <div class="app-row">
+                    <div class="app-row__title">{i.title}</div>
+                    <Pill>{i.mediaType}</Pill>
+                  </div>
+                  <RateForm id={i.id} action="rate" label="Save review" />
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
 
-        <h2>Backlog quick add</h2>
-        <form class="inline" data-action="add">
-          <input type="text" name="title" required maxlength={300} placeholder="Title" aria-label="Title" />
-          <select name="media_type" aria-label="Type">
-            {MEDIA_TYPES.map((t) => (
-              <option value={t}>{t}</option>
-            ))}
-          </select>
-          <button type="submit" class="primary">
-            Add to Backlog
-          </button>
-        </form>
+        <section class="app-section" aria-labelledby="h-add">
+          <h2 class="ui-display app-h2" id="h-add">
+            Backlog quick add
+          </h2>
+          <form class="app-form" data-action="add">
+            <Field id="add-title" label="Title">
+              <input class="ui-input" id="add-title" type="text" name="title" required maxlength={300} placeholder="What do you want to track?" />
+            </Field>
+            <Field id="add-type" label="Type">
+              <SelectBox id="add-type" name="media_type">
+                {MEDIA_TYPES.map((t) => (
+                  <option value={t}>{t}</option>
+                ))}
+              </SelectBox>
+            </Field>
+            <button type="submit" class="ui-btn ui-btn--primary">
+              <Icon name="plus" />
+              Add to Backlog
+            </button>
+          </form>
+        </section>
       </Layout>,
     );
   });

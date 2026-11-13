@@ -27,6 +27,14 @@ describe("Now & Next UI", () => {
       expect(html).toContain(s);
     }
     expect(html).toContain("Up Next is empty.");
+    for (const s of ['class="app-page"', "ui-select-wrap", '<h1 class="ui-display app-title">Now &amp; Next</h1>']) {
+      expect(html).toContain(s);
+    }
+    // The inlined kit CSS also names the class, so count in the body only.
+    expect(html.slice(html.indexOf("<body>")).split("ui-btn--primary").length - 1).toBe(1);
+    for (const s of ['class="card"', 'class="row"', 'class="primary"']) {
+      expect(html).not.toContain(s);
+    }
   });
 
   it("renders seeded rows, escapes titles, and applies filters", async () => {
