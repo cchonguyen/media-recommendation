@@ -37,6 +37,7 @@ body{min-height:100dvh}
 .app-table .ui-select-wrap{min-width:8rem}
 .app-table .rating-cell{display:flex;flex-wrap:nowrap;gap:var(--space-2)}
 .app-table .rating-cell .ui-select-wrap{min-width:4.75rem}
+@media (min-width:640px){.ui-select{min-height:var(--touch-desktop);font-size:14px;line-height:20px}}
 @media (min-width:640px){.app-table .ui-select,.app-table .ui-input{min-height:32px;font-size:13px;line-height:18px;padding-left:var(--space-2)}.app-table .ui-select-wrap .ui-select{padding-right:var(--space-6)}.app-table .ui-select-wrap svg{right:var(--space-2);width:14px;height:14px}.app-table .ui-input{min-width:10rem}}
 .app-pager{display:flex;flex-wrap:wrap;align-items:center;gap:var(--space-3)}
 .app-subnav{display:flex;gap:var(--space-2);overflow-x:auto;padding-bottom:var(--space-1)}
