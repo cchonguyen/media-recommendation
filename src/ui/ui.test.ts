@@ -202,4 +202,14 @@ describe("client script", () => {
     }
     expect(CLIENT_SCRIPT).not.toContain("Sweep done: ");
   });
+
+  it("uses kit toast, notice and dialog with no native confirm", () => {
+    expect(() => new Function(CLIENT_SCRIPT)).not.toThrow();
+    expect(CLIENT_SCRIPT).not.toContain("window.confirm");
+    expect(CLIENT_SCRIPT).not.toContain("alert(");
+    expect(CLIENT_SCRIPT).not.toContain("9000");
+    for (const text of ["ui-toast", "ui-notice", "alertdialog", "6000", "Archive this item?", "Delete this list?", "sessionStorage"]) {
+      expect(CLIENT_SCRIPT).toContain(text);
+    }
+  });
 });

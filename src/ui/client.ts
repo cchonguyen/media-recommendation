@@ -1,14 +1,140 @@
 // Static client script, injected inline. Never interpolates row data.
 export const CLIENT_SCRIPT = `
 (function () {
-  function toast(msg, sticky) {
-    var t = document.getElementById("toast");
-    if (!t) return;
-    t.textContent = msg;
-    t.hidden = false;
-    clearTimeout(toast.h);
-    if (!sticky) toast.h = setTimeout(function () { t.hidden = true; }, 9000);
+  var SVG_OPEN = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">';
+  var ICON_ALERT = SVG_OPEN + '<circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="8" y2="12"/><line x1="12" x2="12.01" y1="16" y2="16"/></svg>';
+  var ICON_INFO = SVG_OPEN + '<circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>';
+  var ICON_CHECK = SVG_OPEN + '<path d="M20 6 9 17l-5-5"/></svg>';
+  function mk(tag, cls, text) {
+    var n = document.createElement(tag);
+    if (cls) n.className = cls;
+    if (text !== undefined) n.textContent = text;
+    return n;
   }
+  function toast(msg, opts) {
+    opts = opts || {};
+    var box = document.getElementById("toasts");
+    if (!box) {
+      box = mk("div", "ui-toasts");
+      box.id = "toasts";
+      box.setAttribute("aria-live", "polite");
+      document.body.appendChild(box);
+    }
+    var t = mk("div", "ui-toast");
+    t.setAttribute("role", "status");
+    t.appendChild(mk("span", "ui-toast__msg", msg));
+    var timer = null;
+    var closed = false;
+    function close() {
+      if (closed) return;
+      closed = true;
+      clearTimeout(timer);
+      if (t.parentNode) t.parentNode.removeChild(t);
+    }
+    function start() {
+      clearTimeout(timer);
+      if (!opts.sticky) timer = setTimeout(close, 6000);
+    }
+    function pause() { clearTimeout(timer); }
+    if (opts.actionLabel) {
+      var ab = mk("button", "ui-toast__action", opts.actionLabel);
+      ab.type = "button";
+      ab.addEventListener("click", function () {
+        if (opts.onAction) opts.onAction();
+        close();
+      });
+      t.appendChild(ab);
+    }
+    t.addEventListener("mouseenter", pause);
+    t.addEventListener("focusin", pause);
+    t.addEventListener("mouseleave", start);
+    t.addEventListener("focusout", start);
+    box.appendChild(t);
+    while (box.children.length > 3) box.removeChild(box.firstChild);
+    start();
+    return { close: close };
+  }
+  function notice(tone, msg, actions) {
+    var box = document.getElementById("notices");
+    if (!box) { toast(msg, { sticky: false }); return; }
+    box.textContent = "";
+    var n = mk("div", "ui-notice" + (tone === "bad" ? " ui-notice--bad" : tone === "warn" ? " ui-notice--warn" : ""));
+    n.setAttribute("role", tone === "info" ? "status" : "alert");
+    var holder = mk("span");
+    holder.innerHTML = tone === "info" ? ICON_INFO : ICON_ALERT;
+    if (holder.firstChild) n.appendChild(holder.firstChild);
+    var body = mk("div", "ui-notice__body");
+    body.appendChild(mk("span", "", msg));
+    var acts = mk("div", "ui-notice__actions");
+    (actions || []).forEach(function (a) {
+      var b = mk("button", "ui-btn", a.label);
+      b.type = "button";
+      b.addEventListener("click", function () { a.run(); });
+      acts.appendChild(b);
+    });
+    var dis = mk("button", "ui-btn ui-btn--ghost", "Dismiss");
+    dis.type = "button";
+    dis.addEventListener("click", function () { if (n.parentNode) n.parentNode.removeChild(n); });
+    acts.appendChild(dis);
+    body.appendChild(acts);
+    n.appendChild(body);
+    box.appendChild(n);
+  }
+  function confirmDialog(o) {
+    return new Promise(function (resolve) {
+      var opener = document.activeElement;
+      var scrim = mk("div", "ui-scrim");
+      var dlg = mk("div", "ui-dialog");
+      dlg.setAttribute("role", "alertdialog");
+      dlg.setAttribute("aria-modal", "true");
+      dlg.setAttribute("aria-labelledby", "dlg-title");
+      dlg.setAttribute("aria-describedby", "dlg-body");
+      var head = mk("div", "ui-dialog__head");
+      var h = mk("h2", "ui-dialog__title", o.title);
+      h.id = "dlg-title";
+      head.appendChild(h);
+      var bd = mk("div", "ui-dialog__body");
+      bd.id = "dlg-body";
+      bd.appendChild(mk("p", "", o.body));
+      var foot = mk("div", "ui-dialog__foot");
+      var cancel = mk("button", "ui-btn ui-btn--ghost", "Cancel");
+      cancel.type = "button";
+      cancel.setAttribute("data-dlg", "cancel");
+      var ok = mk("button", "ui-btn" + (o.danger ? " ui-btn--danger" : ""), o.confirmLabel);
+      ok.type = "button";
+      ok.setAttribute("data-dlg", "ok");
+      foot.appendChild(cancel);
+      foot.appendChild(ok);
+      dlg.appendChild(head);
+      dlg.appendChild(bd);
+      dlg.appendChild(foot);
+      scrim.appendChild(dlg);
+      function finish(v) {
+        document.removeEventListener("keydown", onKey, true);
+        if (scrim.parentNode) scrim.parentNode.removeChild(scrim);
+        if (opener && opener.focus && document.contains(opener)) opener.focus();
+        resolve(v);
+      }
+      function onKey(ev) {
+        if (ev.key === "Escape") { ev.preventDefault(); finish(false); }
+        else if (ev.key === "Tab") {
+          ev.preventDefault();
+          var next = document.activeElement === cancel ? ok : cancel;
+          next.focus();
+        }
+      }
+      cancel.addEventListener("click", function () { finish(false); });
+      ok.addEventListener("click", function () { finish(true); });
+      scrim.addEventListener("click", function (ev) { if (ev.target === scrim) finish(false); });
+      document.addEventListener("keydown", onKey, true);
+      document.body.appendChild(scrim);
+      cancel.focus();
+    });
+  }
+  try {
+    var pending = sessionStorage.getItem("flash");
+    if (pending) { sessionStorage.removeItem("flash"); toast(pending); }
+  } catch (e) { /* storage unavailable */ }
   function call(method, url, body, timeoutMs) {
     var ctl = timeoutMs && window.AbortController ? new AbortController() : null;
     var timer = ctl ? setTimeout(function () { ctl.abort(); }, timeoutMs) : null;
@@ -32,7 +158,7 @@ export const CLIENT_SCRIPT = `
     if (btn) btn.disabled = true;
     return p.then(function () { location.reload(); }, function (e) {
       if (btn) btn.disabled = false;
-      toast(e.message);
+      notice("bad", e.message, [{ label: "Reload page", run: function () { location.reload(); } }]);
     });
   }
   document.addEventListener("click", function (ev) {
@@ -48,12 +174,14 @@ export const CLIENT_SCRIPT = `
     } else if (a === "sweep") {
       if (el.disabled) return;
       el.disabled = true;
-      toast("Sweeping the inbox... this can take up to a minute.", true);
+      var tk = toast("Sweeping the inbox... this can take up to a minute.", { sticky: true });
       call("POST", "/api/sweep", undefined, 60000).then(function (r) {
+        tk.close();
         var msg;
         var reload = false;
-        if (r.skipped === "no-inbox-doc") { msg = "Inbox is not configured: add the INBOX_DOC_ID secret."; }
-        else if (r.skipped === "nothing-to-do") { msg = "The inbox is empty. Add a line under the header in the Doc first."; }
+        var skip = false;
+        if (r.skipped === "no-inbox-doc") { msg = "Inbox is not configured: add the INBOX_DOC_ID secret."; skip = true; }
+        else if (r.skipped === "nothing-to-do") { msg = "The inbox is empty. Add a line under the header in the Doc first."; skip = true; }
         else if (r.ingest) {
           var g = r.ingest;
           msg = g.created + " new, " + g.merged + " merged, " + g.skippedDuplicates + " already seen";
@@ -62,46 +190,64 @@ export const CLIENT_SCRIPT = `
           reload = true;
         } else { msg = "Sweep finished."; }
         el.disabled = false;
+        if (skip) { notice("info", msg, []); return; }
         toast(msg);
-        if (reload) setTimeout(function () { location.reload(); }, 3500);
+        if (reload) {
+          try { sessionStorage.setItem("flash", msg); } catch (e) { /* storage unavailable */ }
+          setTimeout(function () { location.reload(); }, 1200);
+        }
       }, function (e) {
+        tk.close();
         el.disabled = false;
-        toast(/Gemini|parser/i.test(e.message) ? e.message + " Your lines are safe in the Doc; try again in a minute." : e.message);
+        notice("bad", /Gemini|parser/i.test(e.message) ? e.message + " Your lines are safe in the Doc; try again in a minute." : e.message, [{ label: "Try again", run: function () { el.click(); } }]);
       });
     } else if (a === "test-parse") {
       if (el.disabled) return;
       el.disabled = true;
-      toast("Reading the inbox with the parser... this can take up to a minute.", true);
+      var tk2 = toast("Reading the inbox with the parser... this can take up to a minute.", { sticky: true });
       call("POST", "/api/sweep/test-parse", undefined, 60000).then(function (r) {
+        tk2.close();
         el.disabled = false;
         var out = document.getElementById("test-parse-result");
-        if (r.skipped === "no-inbox-doc") { toast("Inbox is not configured: add the INBOX_DOC_ID secret."); return; }
-        if (r.skipped === "nothing-to-do") { toast("The inbox is empty. Add a line under the header in the Doc first."); return; }
+        if (r.skipped === "no-inbox-doc") { notice("info", "Inbox is not configured: add the INBOX_DOC_ID secret.", []); return; }
+        if (r.skipped === "nothing-to-do") { notice("info", "The inbox is empty. Add a line under the header in the Doc first.", []); return; }
         var ls = r.lines || [];
         var ok = 0;
         ls.forEach(function (l) { if (l.ok) ok++; });
         toast("Test parse done.");
         if (!out) return;
         out.textContent = "";
-        var h = document.createElement("p");
-        h.textContent = "Parser would save " + ok + " of " + ls.length + " lines. Test only: nothing was saved and the Doc was not changed.";
-        out.appendChild(h);
+        function withIcon(node, svg) {
+          var hold = mk("span");
+          hold.innerHTML = svg;
+          if (hold.firstChild) node.appendChild(hold.firstChild);
+        }
+        var sum = mk("div", "ui-notice");
+        sum.setAttribute("role", "status");
+        withIcon(sum, ICON_INFO);
+        sum.appendChild(mk("div", "ui-notice__body", "Parser would save " + ok + " of " + ls.length + " lines. Test only: nothing was saved and the Doc was not changed."));
+        out.appendChild(sum);
         ls.forEach(function (l) {
           if (l.ok) return;
-          var p = document.createElement("p");
-          p.className = "bad";
-          p.textContent = "Could not read: " + l.line + " (" + (l.reason || "no parser could read this line") + ")";
+          var p = mk("div", "ui-notice ui-notice--bad");
+          p.setAttribute("role", "alert");
+          withIcon(p, ICON_ALERT);
+          var pb = mk("div", "ui-notice__body");
+          pb.appendChild(mk("span", "", "Could not read: " + l.line + " (" + (l.reason || "no parser could read this line") + ")"));
+          var pa = mk("div", "ui-notice__actions");
+          var again = mk("button", "ui-btn", "Test again");
+          again.type = "button";
+          again.setAttribute("data-action", "test-parse");
+          pa.appendChild(again);
+          pb.appendChild(pa);
+          p.appendChild(pb);
           out.appendChild(p);
         });
-        if (r.diag) {
-          var d = document.createElement("p");
-          d.className = "meta";
-          d.textContent = r.diag;
-          out.appendChild(d);
-        }
+        if (r.diag) out.appendChild(mk("p", "ui-data ui-muted", r.diag));
       }, function (e) {
+        tk2.close();
         el.disabled = false;
-        toast(e.message);
+        notice("bad", e.message, [{ label: "Try again", run: function () { el.click(); } }]);
       });
     } else if (a === "backup") {
       if (el.disabled) return;
@@ -119,18 +265,18 @@ export const CLIENT_SCRIPT = `
         toast(msg);
         var lb = document.getElementById("last-backup");
         if (lb && r.lastBackupAt) lb.textContent = "Last backup: " + r.lastBackupAt.replace("T", " ").slice(0, 16) + " UTC";
-      }, function (e) { el.disabled = false; toast(e.message); });
+      }, function (e) { el.disabled = false; notice("bad", e.message, [{ label: "Try again", run: function () { el.click(); } }]); });
     } else if (a === "archive") {
-      if (!window.confirm("Archive this item? It will be hidden from the library.")) return;
-      done(call("DELETE", "/api/items/" + encodeURIComponent(id)), el);
+      confirmDialog({ title: "Archive this item?", body: "It is hidden from the library. Its history is kept.", confirmLabel: "Archive item", danger: false }).then(function (ok) {
+        if (ok) done(call("DELETE", "/api/items/" + encodeURIComponent(id)), el);
+      });
     }
   });
   function cellDone(p, el) {
     el.disabled = true;
     p.then(function () { el.disabled = false; toast("Saved"); }, function (e) {
       el.disabled = false;
-      toast(e.message);
-      setTimeout(function () { location.reload(); }, 1500);
+      notice("bad", e.message, [{ label: "Reload page", run: function () { location.reload(); } }]);
     });
   }
   function itemUrl(id) { return "/api/items/" + encodeURIComponent(id); }
@@ -187,10 +333,9 @@ export const CLIENT_SCRIPT = `
     if (!box) return;
     fetch("/api/sweeps").then(function (r) { return r.json(); }).then(function (j) {
       var rows = (j && j.sweeps) || [];
-      if (!rows.length) { box.textContent = "No sweeps recorded yet."; return; }
+      if (!rows.length) { box.appendChild(mk("p", "ui-missing app-empty", "No sweeps recorded yet.")); return; }
       rows.forEach(function (s) {
-        var d = document.createElement("div");
-        d.className = "row meta";
+        var d = mk("div", "ui-card app-row ui-data");
         var when = new Date(s.startedAt);
         var text = (isNaN(when.getTime()) ? String(s.startedAt) : when.toLocaleString()) +
           " | " + s.trigger + " | " + s.outcome +
@@ -200,7 +345,7 @@ export const CLIENT_SCRIPT = `
         d.textContent = text;
         box.appendChild(d);
       });
-    }, function () { box.textContent = "Could not load the sweep history."; });
+    }, function () { box.textContent = ""; box.appendChild(mk("p", "ui-missing app-empty", "Could not load the sweep history.")); });
   })();
   // ---- Lists (Slice 10). Row data is only ever set with textContent/value/setAttribute. ----
   var MAX_ITEMS = 100;
@@ -244,7 +389,7 @@ export const CLIENT_SCRIPT = `
       if (after) after(r);
     }, function (e) {
       if (btn) btn.disabled = false;
-      toast(e.message);
+      notice("bad", e.message, []);
     });
   }
   document.addEventListener("click", function (ev) {
@@ -256,8 +401,9 @@ export const CLIENT_SCRIPT = `
       var next = el.getAttribute("data-public") !== "true";
       done(call("PATCH", "/api/lists/" + encodeURIComponent(id), { is_public: next }), el);
     } else if (a === "list-delete") {
-      if (!window.confirm("Delete this list? Its items stay in your library.")) return;
-      flash(call("DELETE", "/api/lists/" + encodeURIComponent(id)), el, function () { location.href = "/lists"; });
+      confirmDialog({ title: "Delete this list?", body: "The list and its ranking are removed and its share link stops working. The items stay in your library.", confirmLabel: "Delete list", danger: true }).then(function (ok) {
+        if (ok) flash(call("DELETE", "/api/lists/" + encodeURIComponent(id)), el, function () { location.href = "/lists"; });
+      });
     } else if (a === "copy-share") {
       var url = shareUrl(el.getAttribute("data-slug"));
       if (navigator.clipboard && navigator.clipboard.writeText) {
@@ -332,9 +478,9 @@ export const CLIENT_SCRIPT = `
       flash(call("GET", "/api/items?limit=20&sort=title&order=asc&q=" + encodeURIComponent(q)), btn, function (r) {
         out.textContent = "";
         var its = r.items || [];
-        if (its.length === 0) { out.textContent = "No matches."; return; }
+        if (its.length === 0) { out.appendChild(mk("p", "ui-missing app-empty", "No matches.")); return; }
         its.forEach(function (it) {
-          var b = document.createElement("button");
+          var b = mk("button", "ui-btn");
           b.type = "button";
           b.setAttribute("data-action", "pick-add");
           b.setAttribute("data-id", it.id);
