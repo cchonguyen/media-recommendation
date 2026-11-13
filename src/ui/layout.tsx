@@ -6,6 +6,9 @@ import { mediaItems, systemKv } from "../db/schema";
 import { LAST_INBOX_SYNC_KEY } from "../api/time";
 import { LAST_BACKUP_KEY } from "../backup/export";
 import { CLIENT_SCRIPT } from "./client";
+import { STYLES } from "./styles";
+import { Icon, FAVICON_HREF } from "./icons";
+import { Pill } from "./controls";
 
 export interface StatusStrip {
   lastSync: string | null;
@@ -14,17 +17,12 @@ export interface StatusStrip {
   failed: number;
 }
 
-export const TABS: { label: string; href: string; key: string }[] = [
-  { label: "Now & Next", href: "/", key: "now" },
-  { label: "Movies", href: "/library/movies", key: "movies" },
-  { label: "TV", href: "/library/tv", key: "tv" },
-  { label: "Books", href: "/library/books", key: "books" },
-  { label: "Games", href: "/library/games", key: "games" },
-  { label: "Podcasts", href: "/library/podcasts", key: "podcasts" },
-  { label: "One-Offs", href: "/library/one-offs", key: "one-offs" },
-  { label: "Completed Archive", href: "/library/completed", key: "completed" },
-  { label: "Lists", href: "/lists", key: "lists" },
-];
+export const DESTINATIONS = [
+  { key: "now", label: "Now & Next", short: "Now", href: "/", icon: "play", keys: ["now"], eyebrow: "Today" },
+  { key: "library", label: "Library", short: "Library", href: "/library/movies", icon: "library", keys: ["movies", "tv", "books", "games", "podcasts", "one-offs"], eyebrow: "Library" },
+  { key: "completed", label: "Completed Archive", short: "Archive", href: "/library/completed", icon: "archive", keys: ["completed"], eyebrow: "Archive" },
+  { key: "lists", label: "Lists", short: "Lists", href: "/lists", icon: "list-ordered", keys: ["lists"], eyebrow: "Curated" },
+] as const;
 
 /** Same logic as GET /api/status: one aggregate plus the cached sync stamp. */
 export async function loadStatusStrip(d1: D1Database, now: Date): Promise<StatusStrip> {
@@ -52,49 +50,6 @@ export async function loadStatusStrip(d1: D1Database, now: Date): Promise<Status
   };
 }
 
-const CSS = `
-:root{--bg:#f6f6f4;--fg:#1c1c1e;--muted:#6b6b70;--card:#fff;--line:#dcdcd6;--accent:#2457c5;--bad:#b3261e}
-@media (prefers-color-scheme:dark){:root{--bg:#141416;--fg:#ececee;--muted:#9a9aa2;--card:#1f1f23;--line:#33333a;--accent:#7aa2ff;--bad:#ff8a80}}
-*{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.45 system-ui,sans-serif}
-header{background:var(--card);border-bottom:1px solid var(--line);padding:.6rem 1rem;position:sticky;top:0;z-index:5}
-.strip{display:flex;flex-wrap:wrap;gap:.5rem 1rem;align-items:center;font-size:.85rem;color:var(--muted)}
-.strip .grow{flex:1}
-nav{display:flex;gap:.25rem;overflow-x:auto;margin-top:.5rem}
-nav a{padding:.35rem .7rem;border-radius:999px;color:var(--fg);text-decoration:none;white-space:nowrap;font-size:.9rem}
-nav a[aria-current=page]{background:var(--accent);color:#fff}
-main{max-width:90rem;margin:0 auto;padding:1rem}
-h1{font-size:1.3rem;margin:.2rem 0 1rem}
-h2{font-size:1.05rem;margin:1.6rem 0 .6rem;border-bottom:1px solid var(--line);padding-bottom:.25rem}
-.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(16rem,1fr));gap:.75rem}
-.card,.row{background:var(--card);border:1px solid var(--line);border-radius:.6rem;padding:.7rem}
-.card{display:flex;gap:.7rem;flex-wrap:wrap}
-.card img{width:56px;height:84px;object-fit:cover;border-radius:.3rem}
-.card .body{flex:1;min-width:10rem}
-.list{display:flex;flex-direction:column;gap:.5rem}
-.row{display:flex;gap:.5rem 1rem;flex-wrap:wrap;align-items:center}
-.row .t{flex:1;min-width:12rem;font-weight:600}
-.meta{color:var(--muted);font-size:.85rem}
-.pill{font-size:.75rem;border:1px solid var(--line);border-radius:999px;padding:0 .5rem;color:var(--muted)}
-.actions{display:flex;gap:.4rem;flex-wrap:wrap;margin-top:.4rem}
-button,select,input,textarea{font:inherit;color:var(--fg);background:var(--bg);border:1px solid var(--line);border-radius:.4rem;padding:.3rem .6rem}
-button{cursor:pointer}
-button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
-button:disabled,button[aria-disabled=true]{opacity:.5;cursor:not-allowed}
-form.inline,form.filters{display:flex;flex-wrap:wrap;gap:.4rem;align-items:center}
-form.rate{display:flex;flex-direction:column;gap:.4rem;width:100%}
-.tablewrap{overflow-x:auto;background:var(--card);border:1px solid var(--line);border-radius:.6rem;margin-top:.6rem}
-table.lib{border-collapse:collapse;width:100%;font-size:.88rem}
-table.lib th,table.lib td{padding:.35rem .5rem;border-bottom:1px solid var(--line);text-align:left;vertical-align:top;white-space:nowrap}
-table.lib th a{color:var(--fg);text-decoration:none}
-table.lib input[type=text]{width:12rem}
-.pager{display:flex;gap:1rem;align-items:center;margin-top:.6rem;font-size:.9rem}
-.empty{color:var(--muted);font-style:italic}
-.bad{color:var(--bad)}
-#toast{position:fixed;left:50%;bottom:1rem;transform:translateX(-50%);background:var(--fg);color:var(--bg);padding:.6rem 1rem;border-radius:.5rem;max-width:90vw;z-index:10}
-[hidden]{display:none!important}
-`;
-
 export function formatSync(iso: string | null): string {
   if (!iso) return "never";
   const d = new Date(iso);
@@ -102,52 +57,99 @@ export function formatSync(iso: string | null): string {
   return d.toISOString().replace("T", " ").slice(0, 16) + " UTC";
 }
 
-export function Layout(props: { active: string; status: StatusStrip; title?: string; children?: Child }) {
-  const { active, status } = props;
+export function Layout(props: { active: string; status: StatusStrip; title?: string; heading?: string; children?: Child }) {
+  const { active, status, heading } = props;
+  const isCurrent = (d: (typeof DESTINATIONS)[number]) => (d.keys as readonly string[]).includes(active);
+  const eyebrow = DESTINATIONS.find(isCurrent)?.eyebrow ?? "Media Tracker";
   return (
     <>
       {raw("<!doctype html>")}
-      <html lang="en">
+      <html lang="en" data-accent="azure" data-density="comfortable">
         <head>
           <meta charset="utf-8" />
           <meta name="viewport" content="width=device-width, initial-scale=1" />
+          <meta name="color-scheme" content="dark light" />
           <title>{props.title ?? "Media Tracker"}</title>
-          <style>{raw(CSS)}</style>
+          <link rel="icon" href={FAVICON_HREF} />
+          <link rel="preconnect" href="https://fonts.googleapis.com" />
+          <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="" />
+          <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:wght@400;500&family=JetBrains+Mono:wght@400;500&display=swap" />
+          <style>{raw(STYLES)}</style>
         </head>
         <body>
-          <header>
-            <div class="strip">
-              <strong>Media Tracker</strong>
-              <span>Last inbox sync: {formatSync(status.lastSync)}</span>
-              <span>Pending enrichment: {status.pending}</span>
-              <span class={status.failed > 0 ? "bad" : ""}>Failed: {status.failed}</span>
-              <span class="grow" />
-              <button type="button" class="primary" data-action="sweep">Sweep Inbox Now</button>
-              <span id="last-backup">Last backup: {formatSync(status.lastBackup)}</span>
-              <button type="button" data-action="backup">
-                Backup to Google Sheets
-              </button>
-            </div>
-            <nav aria-label="Sections">
-              {TABS.map((t) => (
-                <a href={t.href} aria-current={t.key === active ? "page" : undefined}>
-                  {t.label}
+          <div class="ui-shell">
+            <nav class="ui-sidebar" aria-label="Sections">
+              <div class="ui-sidebar__brand">
+                <span class="ui-appmark">
+                  <Icon name="film" />
+                </span>
+                Media Tracker
+              </div>
+              {DESTINATIONS.map((d) => (
+                <a class="ui-nav-item" href={d.href} aria-current={isCurrent(d) ? "page" : undefined}>
+                  <Icon name={d.icon} />
+                  {d.label}
                 </a>
               ))}
             </nav>
-          </header>
-          <main>
-            {active === "now" ? (
-              <section aria-label="Last sweeps">
-                <h2>Last sweeps</h2>
-                <button type="button" data-action="test-parse">Test parse</button>{" "}
-                <div id="sweeps" />
-                <div id="test-parse-result" />
-              </section>
-            ) : null}
-            {props.children}
-          </main>
-          <div id="toast" role="status" hidden />
+            <main class="ui-main" id="main">
+              <div class="app-page">
+                {heading ? (
+                  <header class="app-head">
+                    <span class="ui-eyebrow">{eyebrow}</span>
+                    <h1 class="ui-display app-title">{heading}</h1>
+                  </header>
+                ) : null}
+                <section class="ui-card app-status" aria-label="Inbox status">
+                  <span class="ui-data">Last inbox sync: {formatSync(status.lastSync)}</span>
+                  <Pill tone="mid" icon="clock">
+                    Pending enrichment: {status.pending}
+                  </Pill>
+                  {status.failed > 0 ? (
+                    <Pill tone="bad" icon="alert-circle">
+                      Failed: {status.failed}
+                    </Pill>
+                  ) : (
+                    <Pill>Failed: 0</Pill>
+                  )}
+                  <span class="app-status__grow" />
+                  <button type="button" class="ui-btn" data-action="sweep">
+                    <Icon name="refresh-cw" />
+                    Sweep Inbox Now
+                  </button>
+                  <span class="ui-data" id="last-backup">Last backup: {formatSync(status.lastBackup)}</span>
+                  <button type="button" class="ui-btn" data-action="backup">
+                    <Icon name="download" />
+                    Backup to Google Sheets
+                  </button>
+                </section>
+                <div id="notices" class="app-notices" />
+                {props.children}
+                {active === "now" ? (
+                  <section class="app-section" aria-labelledby="h-sweeps">
+                    <h2 class="ui-display app-h2" id="h-sweeps">Last sweeps</h2>
+                    <div class="app-actions">
+                      <button type="button" class="ui-btn" data-action="test-parse">
+                        <Icon name="search" />
+                        Test parse
+                      </button>
+                    </div>
+                    <div id="sweeps" class="app-stack" />
+                    <div id="test-parse-result" class="app-stack" />
+                  </section>
+                ) : null}
+              </div>
+            </main>
+            <nav class="ui-tabbar" aria-label="Sections (mobile)">
+              {DESTINATIONS.map((d) => (
+                <a class="ui-tab" href={d.href} aria-current={isCurrent(d) ? "page" : undefined}>
+                  <Icon name={d.icon} size={20} />
+                  {d.short}
+                </a>
+              ))}
+            </nav>
+          </div>
+          <div class="ui-toasts" id="toasts" aria-live="polite" />
           <script>{raw(CLIENT_SCRIPT)}</script>
         </body>
       </html>
