@@ -303,6 +303,11 @@ describe("design system guards", () => {
     }
   });
 
+  it("in-row selects are compact and Rating/Tier sit side by side", () => {
+    expect(STYLES).toContain(".app-table .rating-cell{display:flex;flex-wrap:nowrap");
+    expect(STYLES).toContain(".app-table .ui-select,.app-table .ui-input{min-height:32px;font-size:13px");
+  });
+
   it("STYLES carries the azure accent and Newsreader, and no legacy block", () => {
     expect(STYLES).toContain('[data-accent="azure"]');
     expect(STYLES).toContain("Newsreader");
