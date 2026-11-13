@@ -303,10 +303,13 @@ describe("design system guards", () => {
     }
   });
 
-  it("in-row selects are compact and Rating/Tier sit side by side", () => {
-    expect(STYLES).toContain(".ui-select{min-height:var(--touch-desktop);font-size:14px");
-    expect(STYLES).toContain(".app-table .rating-cell{display:flex;flex-wrap:nowrap");
-    expect(STYLES).toContain(".app-table .ui-select,.app-table .ui-input{min-height:32px;font-size:13px");
+  it("Library table uses the kit's compact cells and inline Rating/Tier pair", async () => {
+    const lib = (await pages()).find(([p]) => p === "/library/movies")![1];
+    expect(lib).toContain('class="app-table ui-table"');
+    expect(lib).toContain("ui-control-pair");
+    expect(STYLES).toContain("--control-h-compact");
+    expect(STYLES).toContain(".ui-control-pair{display:flex;flex-wrap:nowrap");
+    expect(STYLES).not.toContain(".app-table .rating-cell");
   });
 
   it("STYLES carries the azure accent and Newsreader, and no legacy block", () => {

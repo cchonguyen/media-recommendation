@@ -99,7 +99,7 @@ function SortTh(props: { base: string; p: Params; col: SortKey; label: string })
 function RatingCell(props: { i: MediaItem }) {
   const { i } = props;
   return (
-    <div class="rating-cell app-actions" data-id={i.id}>
+    <div class="rating-cell ui-control-pair" data-id={i.id}>
       <SelectBox label={`Rating for ${i.title}`} attrs={{ "data-action": "rating", "data-id": i.id }}>
         <option value="" selected={i.myRating === null}>
           -
@@ -331,7 +331,7 @@ export function createLibraryRoutes(options: { now?: () => Date } = {}) {
           <p class="app-empty ui-missing">{filtered ? "No items match these filters." : "Nothing here yet."}</p>
         ) : (
           <div class="table-scroll ui-card">
-            <table class="app-table">
+            <table class="app-table ui-table">
               <caption>
                 {heading} table
               </caption>
