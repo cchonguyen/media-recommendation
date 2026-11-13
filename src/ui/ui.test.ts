@@ -5,6 +5,8 @@ import { curatedListItems, curatedLists } from "../db/schema";
 import { createUiRoutes } from "./now-next";
 import { setCachedValue } from "../google/token";
 import { CLIENT_SCRIPT } from "./client";
+import { STYLES } from "./styles";
+import { readFileSync } from "node:fs";
 
 const NOW = new Date("2026-07-10T12:00:00Z");
 
@@ -252,5 +254,58 @@ describe("client script", () => {
     for (const text of ["ui-toast", "ui-notice", "alertdialog", "6000", "Archive this item?", "Delete this list?", "sessionStorage"]) {
       expect(CLIENT_SCRIPT).toContain(text);
     }
+  });
+});
+
+describe("design system guards", () => {
+  async function pages() {
+    const h = harness();
+    await seed(h.db, { id: "m1", title: "Alpha Movie", mediaType: "Movie", status: "Backlog" });
+    await seed(h.db, { id: "c1", title: "Finished Book", mediaType: "Book", status: "Completed", consumedYear: 2025 });
+    await h.db.insert(curatedLists).values({ id: "lst_abc123", slug: "my-list", title: "My List", description: "d", isPublic: true, createdAt: "2026-01-01", updatedAt: "2026-01-01" });
+    await h.db.insert(curatedListItems).values([{ id: "l1", listId: "lst_abc123", mediaItemId: "c1", rank: 1, blurb: "nice", createdAt: "2026-01-01" }]);
+    const out: [string, string][] = [];
+    for (const p of ["/", "/library/movies", "/library/completed", "/lists", "/lists/lst_abc123"]) {
+      const res = await h.get(p);
+      expect(res.status).toBe(200);
+      out.push([p, await res.text()]);
+    }
+    return out;
+  }
+
+  it("uses kit classes only and no legacy classes or inline styles", async () => {
+    for (const [p, html] of await pages()) {
+      const tags = (name: string) => html.match(new RegExp(`<${name}\\b[^>]*>`, "g")) ?? [];
+      for (const t of tags("button")) expect(t, `${p} ${t}`).toMatch(/class="[^"]*\bui-(btn|icon-btn|toast__action|segmented__opt)\b/);
+      for (const t of tags("select")) expect(t, `${p} ${t}`).toMatch(/class="[^"]*\bui-select\b/);
+      for (const t of tags("textarea")) expect(t, `${p} ${t}`).toMatch(/class="[^"]*\bui-textarea\b/);
+      for (const t of tags("input")) {
+        if (/type="text"/.test(t)) expect(t, `${p} ${t}`).toMatch(/class="[^"]*\bui-input\b/);
+      }
+      expect(html, p).not.toContain("style=");
+      for (const s of ['class="card"', 'class="row"', 'class="list"', 'class="pill"', 'class="meta"', 'class="actions"', 'class="empty"', 'class="primary"', "tablewrap", 'table class="lib"']) {
+        expect(html, `${p} ${s}`).not.toContain(s);
+      }
+    }
+  });
+
+  it("has exactly one h1 and at most one primary button per page", async () => {
+    for (const [p, html] of await pages()) {
+      expect((html.match(/<h1\b/g) ?? []).length, p).toBe(1);
+      expect((html.match(/class="[^"]*\bui-btn--primary\b/g) ?? []).length, p).toBeLessThanOrEqual(1);
+    }
+  });
+
+  it("source files use tokens, not hex colours", () => {
+    for (const f of ["app-css.ts", "layout.tsx", "now-next.tsx", "library.tsx", "lists.tsx", "controls.tsx"]) {
+      const src = readFileSync(new URL(`./${f}`, import.meta.url), "utf8");
+      expect(src.match(/[:\s(,]#[0-9a-fA-F]{3,8}\b/g), f).toBeNull();
+    }
+  });
+
+  it("STYLES carries the azure accent and Newsreader, and no legacy block", () => {
+    expect(STYLES).toContain('[data-accent="azure"]');
+    expect(STYLES).toContain("Newsreader");
+    expect(STYLES).not.toContain("LEGACY");
   });
 });
