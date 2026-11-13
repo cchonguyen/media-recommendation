@@ -59,7 +59,7 @@ export type IconName = keyof typeof PATHS;
 export function Icon(props: { name: IconName; size?: number }) // default size 16
 ```
 
-Renders `<svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">` then `{raw(PATHS[name])}`. Also export `FAVICON_HREF` (a `data:image/svg+xml,` URI, URL-encoded, of a 32x32 rounded-square: `rect` rx 7 fill `#6ea8ff`, holding the `film` glyph stroked `#14121f`). These two hex values are copied from `tokens.css` (`--neon-azure`, `--on-accent` in dark) with a comment saying so. They are the only hex literals allowed in `.tsx` files, and only in `icons.tsx`.
+Renders `<svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">` then `{raw(PATHS[name])}`. Also export `FAVICON_HREF` (a `data:image/svg+xml,` URI, URL-encoded, of a 32x32 rounded-square: `rect` rx 7 fill `#67aafe`, holding the `film` glyph stroked `#14121f`). These two hex values are copied from `tokens.css` (`--neon-azure`, `--on-accent` in dark) with a comment saying so. They are the only hex literals allowed in `.tsx` files, and only in `icons.tsx`.
 
 `PATHS` (inner SVG markup, 24x24 lucide, copied exactly):
 
