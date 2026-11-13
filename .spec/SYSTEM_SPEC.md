@@ -154,6 +154,8 @@ REST routes under `/api/items` for create, update, status transitions, rating an
 - **Lists.** Create and reorder ranked lists, "Draft List with AI" prompt box, share toggle.
 - **Header.** Last inbox sync time, pending and failed enrichment counts, "Sweep Inbox Now" and "Backup to Google Sheets" buttons.
 
+**Design system (added 2026-11-13).** All screens follow Harness UI. The contract, module boundaries and slices are in `.spec/DESIGN_SPEC.md`; the app profile is `design-system/profile.md`. Module boundaries: `src/ui/kit-css.generated.ts` (generated, never hand-edited), `src/ui/app-css.ts` (app-only CSS), `src/ui/styles.ts` (`STYLES`, imported by both `src/ui/layout.tsx` and `src/share/routes.tsx`), `src/ui/icons.tsx`, `src/ui/controls.tsx`. No schema or API change. Not built: an `/assets` CSS route, any JS icon or UI library, a theme picker, web fonts on `/share/:slug`.
+
 ### 5.5 Curated lists, AI drafter, public share
 
 CRUD under `/api/lists`. The drafter queries matching `Completed` items and asks Gemini for a ranked list with blurbs; the result is a draft the user saves. `/share/:slug` serves only public lists under invariant 9.
