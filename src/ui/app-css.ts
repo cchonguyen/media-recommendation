@@ -65,6 +65,7 @@ body{min-height:100dvh}
 .app-star--full svg{fill:currentColor}
 .app-star__half-fill{fill:currentColor;stroke:none}
 .app-pager{display:flex;flex-wrap:wrap;align-items:center;gap:var(--space-3)}
+.app-filter-chip{text-decoration:none}
 .app-subnav{display:flex;gap:var(--space-2);overflow-x:auto;padding-bottom:var(--space-1)}
 .app-subnav a.ui-pill{height:auto;min-height:var(--touch-phone);padding:0 var(--space-4);text-decoration:none}
 .app-rank{min-width:2.5rem;justify-content:center}

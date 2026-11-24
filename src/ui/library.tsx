@@ -1,13 +1,13 @@
 import { Hono } from "hono";
-import { and, asc, desc, eq, like, ne, sql } from "drizzle-orm";
+import { and, asc, desc, eq, isNotNull, isNull, like, ne, sql } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import { MEDIA_TYPES, STATUSES, TIERS, mediaItems } from "../db/schema";
 import type { MediaItem } from "../db/schema";
-import { isMediaType, isStatus } from "../api/validate";
+import { isMediaType, isStatus, isTier } from "../api/validate";
 import { Layout, loadStatusStrip } from "./layout";
 import { Icon } from "./icons";
-import { Field, MEDIA_TYPE_ICON, Missing, STATUS_META, SelectBox, StarRating } from "./controls";
+import { MEDIA_TYPE_ICON, Missing, STATUS_META, SelectBox, StarRating } from "./controls";
 
 export const PAGE_SIZE = 50;
 
@@ -37,6 +37,9 @@ function escapeLike(s: string): string {
   return s.replace(/[\\%_]/g, (c) => `\\${c}`);
 }
 
+type TriState = "" | "yes" | "no";
+const parseTri = (v: string | undefined): TriState => (v === "yes" || v === "no" ? v : "");
+
 interface Params {
   page: number;
   sort: SortKey;
@@ -45,6 +48,10 @@ interface Params {
   q: string;
   type: string;
   year: string;
+  tier: string;
+  rated: TriState;
+  has_notes: TriState;
+  has_review: TriState;
 }
 
 function parseParams(q: Record<string, string>, archive: boolean): Params {
@@ -58,6 +65,10 @@ function parseParams(q: Record<string, string>, archive: boolean): Params {
     q: (q.q ?? "").trim().slice(0, 100),
     type: archive && isMediaType(q.type) ? q.type : "",
     year: archive && /^\d{4}$/.test(yr) ? yr : "",
+    tier: isTier(q.tier) ? q.tier : "",
+    rated: parseTri(q.rated),
+    has_notes: !archive ? parseTri(q.has_notes) : "",
+    has_review: archive ? parseTri(q.has_review) : "",
   };
 }
 
@@ -69,15 +80,40 @@ function href(base: string, p: Params, over: Partial<Record<keyof Params, string
     q: p.q,
     type: p.type,
     consumed_year: p.year,
+    tier: p.tier,
+    rated: p.rated,
+    has_notes: p.has_notes,
+    has_review: p.has_review,
     page: String(p.page),
   };
   const o = over as Record<string, string | number>;
   if ("year" in o) m.consumed_year = String(o.year);
-  for (const k of ["sort", "dir", "status", "q", "type", "page"]) if (k in o) m[k] = String(o[k]);
+  for (const k of ["sort", "dir", "status", "q", "type", "tier", "rated", "has_notes", "has_review", "page"]) if (k in o) m[k] = String(o[k]);
   const sp = new URLSearchParams();
   for (const [k, v] of Object.entries(m)) if (v !== "" && !(k === "page" && v === "1")) sp.set(k, v);
   const qs = sp.toString();
   return qs ? `${base}?${qs}` : base;
+}
+
+function FilterToggle(props: { name: string; state: TriState; anyLabel: string; yesLabel: string; noLabel: string }) {
+  const { name, state, anyLabel, yesLabel, noLabel } = props;
+  const label = state === "yes" ? yesLabel : state === "no" ? noLabel : anyLabel;
+  return (
+    <>
+      <input type="hidden" name={name} value={state} />
+      <button
+        type="button"
+        class="ui-filter-toggle"
+        data-action="filter-toggle"
+        data-filter-name={name}
+        data-state={state || undefined}
+        aria-pressed={state === "yes" ? "true" : state === "no" ? "mixed" : "false"}
+      >
+        {state === "yes" ? <Icon name="check" /> : state === "no" ? <Icon name="minus" /> : null}
+        {label}
+      </button>
+    </>
+  );
 }
 
 function SortTh(props: { base: string; p: Params; col: SortKey; label: string }) {
@@ -260,18 +296,37 @@ export function createLibraryRoutes(options: { now?: () => Date } = {}) {
     }
     if (p.type) conds.push(eq(mediaItems.mediaType, p.type as (typeof MEDIA_TYPES)[number]));
     if (p.year) conds.push(eq(mediaItems.consumedYear, Number(p.year)));
+    if (p.tier) conds.push(eq(mediaItems.personalTier, p.tier as (typeof TIERS)[number]));
+    if (p.rated === "yes") conds.push(isNotNull(mediaItems.myRating));
+    if (p.rated === "no") conds.push(isNull(mediaItems.myRating));
+    if (p.has_notes === "yes") conds.push(ne(mediaItems.personalNotes, ""));
+    if (p.has_notes === "no") conds.push(eq(mediaItems.personalNotes, ""));
+    if (p.has_review === "yes") conds.push(ne(mediaItems.reviewText, ""));
+    if (p.has_review === "no") conds.push(eq(mediaItems.reviewText, ""));
     if (p.q) conds.push(sql`${mediaItems.title} LIKE ${"%" + escapeLike(p.q) + "%"} ESCAPE '\\'`);
     const where = and(...conds);
 
-    const [status, countRows] = await Promise.all([
+    const db = drizzle(c.env.DB as D1Database);
+    const [status, countRows, yearRows] = await Promise.all([
       loadStatusStrip(c.env.DB, nowFn()),
-      drizzle(c.env.DB as D1Database).select({ n: sql<number>`count(*)` }).from(mediaItems).where(where),
+      db.select({ n: sql<number>`count(*)` }).from(mediaItems).where(where),
+      archive
+        ? db
+            .selectDistinct({ y: mediaItems.consumedYear })
+            .from(mediaItems)
+            .where(and(eq(mediaItems.status, "Completed"), isNotNull(mediaItems.consumedYear)))
+            .orderBy(desc(mediaItems.consumedYear))
+        : Promise.resolve([]),
     ]);
+    const yearSet = new Set(yearRows.map((r) => r.y).filter((y): y is number => y !== null));
+    if (p.year) yearSet.add(Number(p.year));
+    const years = Array.from(yearSet).sort((a, b) => b - a);
+
     const total = Number(countRows[0]?.n ?? 0);
     const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
     p.page = Math.min(p.page, pages);
     const col = SORTS[p.sort];
-    const rows = await drizzle(c.env.DB as D1Database)
+    const rows = await db
       .select()
       .from(mediaItems)
       .where(where)
@@ -280,7 +335,19 @@ export function createLibraryRoutes(options: { now?: () => Date } = {}) {
       .offset((p.page - 1) * PAGE_SIZE);
 
     const heading = archive ? "Completed Archive" : TYPE_ROUTES[slug as keyof typeof TYPE_ROUTES].label;
-    const filtered = Boolean(p.q || p.status || p.type || p.year);
+    const activeFilters: { key: keyof Params; label: string }[] = [];
+    if (p.status) activeFilters.push({ key: "status", label: p.status });
+    if (p.type) activeFilters.push({ key: "type", label: p.type });
+    if (p.year) activeFilters.push({ key: "year", label: p.year });
+    if (p.tier) activeFilters.push({ key: "tier", label: `Tier ${p.tier}` });
+    if (p.rated === "yes") activeFilters.push({ key: "rated", label: "Has rating" });
+    if (p.rated === "no") activeFilters.push({ key: "rated", label: "No rating" });
+    if (p.has_notes === "yes") activeFilters.push({ key: "has_notes", label: "Has notes" });
+    if (p.has_notes === "no") activeFilters.push({ key: "has_notes", label: "No notes" });
+    if (p.has_review === "yes") activeFilters.push({ key: "has_review", label: "Has review" });
+    if (p.has_review === "no") activeFilters.push({ key: "has_review", label: "No review" });
+    const activeCount = activeFilters.length;
+    const filtered = Boolean(p.q || activeCount > 0);
     const th = (col: SortKey, label: string) => <SortTh base={base} p={p} col={col} label={label} />;
     return c.html(
       <Layout active={slug} status={status} title={heading} heading={heading}>
@@ -297,48 +364,110 @@ export function createLibraryRoutes(options: { now?: () => Date } = {}) {
             })}
           </nav>
         )}
-        <form class="app-form" method="get" action={base}>
-          <Field id="q" label="Search title">
-            <input class="ui-input" id="q" type="text" name="q" value={p.q} placeholder="Search title" maxlength={100} />
-          </Field>
-          {archive ? (
-            <>
-              <Field id="f-type" label="Type">
-                <SelectBox id="f-type" name="type">
-                  <option value="">All types</option>
-                  {MEDIA_TYPES.map((t) => (
-                    <option value={t} selected={t === p.type}>
-                      {t}
+        <form class="app-stack" method="get" action={base} data-filter-form="">
+          <div class="ui-filter-bar">
+            <input class="ui-input" id="q" type="text" name="q" value={p.q} placeholder="Search title" aria-label="Search title" maxlength={100} />
+            <button
+              type="button"
+              class={activeCount > 0 ? "ui-btn ui-filter-trigger ui-filter-trigger--active" : "ui-btn ui-filter-trigger"}
+              data-action="toggle-filters"
+              aria-expanded={activeCount > 0 ? "true" : "false"}
+              aria-controls="filter-panel"
+            >
+              <Icon name="sliders-horizontal" />
+              {activeCount > 0 ? `Filters (${activeCount})` : "Filters"}
+            </button>
+            {activeFilters.map((f) => (
+              <a href={href(base, p, { [f.key]: "", page: 1 })} class="ui-pill ui-pill--active app-filter-chip" aria-label={`Remove ${f.label} filter`}>
+                <Icon name="check" />
+                {f.label}
+                <Icon name="x" />
+              </a>
+            ))}
+            <button type="submit" class="ui-btn">
+              Search
+            </button>
+            {filtered ? (
+              <a class="ui-btn ui-btn--ghost" href={base}>
+                Clear
+              </a>
+            ) : null}
+          </div>
+          <div class="ui-filter-panel" id="filter-panel" hidden={activeCount === 0}>
+            <div class="ui-filter-group">
+              {archive ? (
+                <>
+                  <select
+                    class={p.type ? "ui-filter-select ui-filter-select--active" : "ui-filter-select"}
+                    name="type"
+                    aria-label="Filter by type"
+                    data-active={p.type ? "true" : undefined}
+                    data-filter-auto=""
+                  >
+                    <option value="">Type</option>
+                    {MEDIA_TYPES.map((t) => (
+                      <option value={t} selected={t === p.type}>
+                        {t}
+                      </option>
+                    ))}
+                  </select>
+                  <select
+                    class={p.year ? "ui-filter-select ui-filter-select--active" : "ui-filter-select"}
+                    name="consumed_year"
+                    aria-label="Filter by consumed year"
+                    data-active={p.year ? "true" : undefined}
+                    data-filter-auto=""
+                  >
+                    <option value="">Year</option>
+                    {years.map((y) => (
+                      <option value={String(y)} selected={String(y) === p.year}>
+                        {y}
+                      </option>
+                    ))}
+                  </select>
+                </>
+              ) : (
+                <select
+                  class={p.status ? "ui-filter-select ui-filter-select--active" : "ui-filter-select"}
+                  name="status"
+                  aria-label="Filter by status"
+                  data-active={p.status ? "true" : undefined}
+                  data-filter-auto=""
+                >
+                  <option value="">Status</option>
+                  {STATUSES.map((s) => (
+                    <option value={s} selected={s === p.status}>
+                      {s}
                     </option>
                   ))}
-                </SelectBox>
-              </Field>
-              <Field id="f-year" label="Consumed year">
-                <input class="ui-input" id="f-year" type="text" name="consumed_year" value={p.year} placeholder="Year" inputmode="numeric" maxlength={4} />
-              </Field>
-            </>
-          ) : (
-            <Field id="f-status" label="Status">
-              <SelectBox id="f-status" name="status">
-                <option value="">Active statuses</option>
-                {STATUSES.map((s) => (
-                  <option value={s} selected={s === p.status}>
-                    {s}
+                </select>
+              )}
+              <select
+                class={p.tier ? "ui-filter-select ui-filter-select--active" : "ui-filter-select"}
+                name="tier"
+                aria-label="Filter by tier"
+                data-active={p.tier ? "true" : undefined}
+                data-filter-auto=""
+              >
+                <option value="">Tier</option>
+                {TIERS.map((t) => (
+                  <option value={t} selected={t === p.tier}>
+                    {`Tier ${t}`}
                   </option>
                 ))}
-              </SelectBox>
-            </Field>
-          )}
+              </select>
+            </div>
+            <div class="ui-filter-group">
+              <FilterToggle name="rated" state={p.rated} anyLabel="Rating" yesLabel="Has rating" noLabel="No rating" />
+              {archive ? (
+                <FilterToggle name="has_review" state={p.has_review} anyLabel="Review" yesLabel="Has review" noLabel="No review" />
+              ) : (
+                <FilterToggle name="has_notes" state={p.has_notes} anyLabel="Notes" yesLabel="Has notes" noLabel="No notes" />
+              )}
+            </div>
+          </div>
           <input type="hidden" name="sort" value={p.sort} />
           <input type="hidden" name="dir" value={p.dir} />
-          <button type="submit" class="ui-btn">
-            Filter
-          </button>
-          {filtered ? (
-            <a class="ui-btn ui-btn--ghost" href={base}>
-              Clear
-            </a>
-          ) : null}
         </form>
         <p class="ui-help">Editing a title to the form &quot;Title (2021)&quot; sets the year hint and re-runs enrichment for that item.</p>
         {rows.length === 0 ? (
