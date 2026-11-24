@@ -29,7 +29,7 @@ describe("Now & Next UI", () => {
       expect(html).toContain(s);
     }
     expect(html).toContain("Up Next is empty.");
-    for (const s of ['class="app-page"', "ui-select-wrap", '<h1 class="ui-display app-title">Now &amp; Next</h1>']) {
+    for (const s of ['class="app-page"', "app-menu-wrap", '<h1 class="ui-display app-title">Now &amp; Next</h1>']) {
       expect(html).toContain(s);
     }
     // The inlined kit CSS also names the class, so count in the body only.
@@ -318,11 +318,20 @@ describe("design system guards", () => {
     const lib = all.find(([p]) => p === "/library/movies")![1];
     const arch = all.find(([p]) => p === "/library/completed")![1];
 
-    // Type column is first in both Library and Archive tables and uses icon picker
+    // Type column is first in both Library and Archive tables and uses icon menu picker
     expect(lib).toMatch(/<thead>\s*<tr>\s*<th class="app-col-type">Type<\/th>/);
     expect(arch).toMatch(/<thead>\s*<tr>\s*<th class="app-col-type">Type<\/th>/);
-    expect(lib).toContain('class="app-icon-select" data-tooltip="Movie"');
-    expect(arch).toContain('class="app-icon-select" data-tooltip="Book"');
+    expect(lib).toContain('data-menu-variant="icon"');
+    expect(lib).toContain('title="Movie"');
+    expect(arch).toContain('data-menu-variant="icon"');
+    expect(arch).toContain('title="Book"');
+
+    // Top Library sub-nav pills include icons for every media type
+    const subnavMatch = lib.match(/<nav class="app-subnav"[\s\S]*?<\/nav>/);
+    expect(subnavMatch).not.toBeNull();
+    const subnavLinks = subnavMatch![0].match(/<a [^>]*>[\s\S]*?<\/a>/g) ?? [];
+    expect(subnavLinks.length).toBe(6);
+    for (const link of subnavLinks) expect(link).toContain("<svg ");
 
     // Title input is twice as wide (20rem) and has full-name tooltip wrapper
     expect(STYLES).toContain(".app-table .app-title-input{min-width:20rem}");
@@ -339,9 +348,10 @@ describe("design system guards", () => {
     expect(arch).toContain('class="app-stars"');
     expect(now).toContain('class="app-stars"');
 
-    // Status uses icon + text wrapper with tone class
-    expect(lib).toContain('class="app-status-select app-status-select--neutral"');
-    expect(lib).toContain('class="app-status-select__face"');
+    // Status uses icon + text menu trigger with tone class
+    expect(lib).toContain("app-status-select--neutral");
+    expect(lib).toContain('data-action="open-menu"');
+    expect(lib).toContain('aria-haspopup="listbox"');
   });
 
   it("Library and Completed Archive adopt the Harness UI Filters pattern", async () => {
@@ -358,8 +368,9 @@ describe("design system guards", () => {
     expect(libDefault).toContain('class="ui-filter-bar"');
     expect(libDefault).toContain("ui-filter-trigger");
     expect(libDefault).toContain('class="ui-filter-panel" id="filter-panel" hidden');
-    expect(libDefault).toContain("ui-filter-select");
+    expect(libDefault).toContain("app-filter-menu");
     expect(libDefault).toContain("ui-filter-toggle");
+    expect(libDefault).toContain("data-menu-options");
 
     const libFiltered = await (await h.get("/library/movies?tier=S&has_notes=yes")).text();
     expect(libFiltered).toContain("Filters (2)");

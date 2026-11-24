@@ -7,7 +7,7 @@ import type { MediaItem } from "../db/schema";
 import { isMediaType, isStatus, isTier } from "../api/validate";
 import { Layout, loadStatusStrip } from "./layout";
 import { Icon } from "./icons";
-import { MEDIA_TYPE_ICON, Missing, STATUS_META, SelectBox, StarRating } from "./controls";
+import { IconMenu, MEDIA_TYPE_ICON, Missing, STATUS_META, StarRating } from "./controls";
 
 export const PAGE_SIZE = 50;
 
@@ -135,16 +135,16 @@ function RatingCell(props: { i: MediaItem }) {
   return (
     <div class="rating-cell ui-control-pair" data-id={i.id}>
       <StarRating itemId={i.id} value={i.myRating} label={`Rating for ${i.title}`} mode="inline" />
-      <SelectBox label={`Tier for ${i.title}`} attrs={{ "data-action": "tier", "data-id": i.id }}>
-        <option value="" selected={i.personalTier === null}>
-          -
-        </option>
-        {TIERS.map((t) => (
-          <option value={t} selected={i.personalTier === t}>
-            {t}
-          </option>
-        ))}
-      </SelectBox>
+      <IconMenu
+        variant="field"
+        value={i.personalTier ?? ""}
+        label={`Tier for ${i.title}`}
+        inputAttrs={{ "data-action": "tier", "data-id": i.id }}
+        options={[
+          { value: "", label: "-", icon: "award" },
+          ...TIERS.map((t) => ({ value: t, label: t, icon: "award" as const })),
+        ]}
+      />
     </div>
   );
 }
@@ -152,47 +152,36 @@ function RatingCell(props: { i: MediaItem }) {
 function StatusSelect(props: { i: MediaItem }) {
   const { i } = props;
   const opts = STATUSES.filter((s) => s !== "Archived" || i.status === "Archived");
-  const meta = STATUS_META[i.status] ?? { icon: "clock" as const, tone: "neutral" as const };
   return (
-    <div class={`app-status-select app-status-select--${meta.tone}`}>
-      <span class="app-status-select__face" aria-hidden="true">
-        <Icon name={meta.icon} size={16} />
-        <span>{i.status}</span>
-        <Icon name="chevron-down" size={14} />
-      </span>
-      <select class="ui-select app-status-select__native" data-action="set-status" data-id={i.id} aria-label={`Status for ${i.title}`}>
-        {opts.map((s) => (
-          <option value={s} selected={s === i.status}>
-            {s}
-          </option>
-        ))}
-      </select>
-    </div>
+    <IconMenu
+      variant="status"
+      value={i.status}
+      label={`Status for ${i.title}`}
+      inputAttrs={{ "data-action": "set-status", "data-id": i.id }}
+      options={opts.map((s) => ({
+        value: s,
+        label: s,
+        icon: STATUS_META[s]?.icon ?? "clock",
+        tone: STATUS_META[s]?.tone ?? "neutral",
+      }))}
+    />
   );
 }
 
 function TypeSelect(props: { i: MediaItem }) {
   const { i } = props;
-  const icon = MEDIA_TYPE_ICON[i.mediaType] ?? "film";
   return (
-    <div class="app-icon-select" data-tooltip={i.mediaType}>
-      <span class="app-icon-select__face" aria-hidden="true">
-        <Icon name={icon} size={16} />
-      </span>
-      <select
-        class="ui-select app-icon-select__native"
-        data-action="set-type"
-        data-id={i.id}
-        aria-label={`Type for ${i.title}: ${i.mediaType}`}
-        title={i.mediaType}
-      >
-        {MEDIA_TYPES.map((t) => (
-          <option value={t} selected={t === i.mediaType}>
-            {t}
-          </option>
-        ))}
-      </select>
-    </div>
+    <IconMenu
+      variant="icon"
+      value={i.mediaType}
+      label={`Type for ${i.title}: ${i.mediaType}`}
+      inputAttrs={{ "data-action": "set-type", "data-id": i.id }}
+      options={MEDIA_TYPES.map((t) => ({
+        value: t,
+        label: t,
+        icon: MEDIA_TYPE_ICON[t] ?? "film",
+      }))}
+    />
   );
 }
 
@@ -357,8 +346,9 @@ export function createLibraryRoutes(options: { now?: () => Date } = {}) {
               const current = k === slug;
               return (
                 <a href={`/library/${k}`} class={current ? "ui-pill ui-pill--active" : "ui-pill"} aria-current={current ? "page" : undefined}>
-                  {current ? <Icon name="check" /> : null}
+                  <Icon name={MEDIA_TYPE_ICON[r.type] ?? "film"} />
                   {r.label}
+                  {current ? <Icon name="check" /> : null}
                 </a>
               );
             })}
@@ -397,65 +387,57 @@ export function createLibraryRoutes(options: { now?: () => Date } = {}) {
             <div class="ui-filter-group">
               {archive ? (
                 <>
-                  <select
-                    class={p.type ? "ui-filter-select ui-filter-select--active" : "ui-filter-select"}
+                  <IconMenu
+                    variant="filter"
                     name="type"
-                    aria-label="Filter by type"
-                    data-active={p.type ? "true" : undefined}
-                    data-filter-auto=""
-                  >
-                    <option value="">Type</option>
-                    {MEDIA_TYPES.map((t) => (
-                      <option value={t} selected={t === p.type}>
-                        {t}
-                      </option>
-                    ))}
-                  </select>
-                  <select
-                    class={p.year ? "ui-filter-select ui-filter-select--active" : "ui-filter-select"}
+                    value={p.type}
+                    label="Filter by type"
+                    autoSubmit
+                    options={[
+                      { value: "", label: "Type", icon: "layers" },
+                      ...MEDIA_TYPES.map((t) => ({ value: t, label: t, icon: MEDIA_TYPE_ICON[t] ?? "film" })),
+                    ]}
+                  />
+                  <IconMenu
+                    variant="filter"
                     name="consumed_year"
-                    aria-label="Filter by consumed year"
-                    data-active={p.year ? "true" : undefined}
-                    data-filter-auto=""
-                  >
-                    <option value="">Year</option>
-                    {years.map((y) => (
-                      <option value={String(y)} selected={String(y) === p.year}>
-                        {y}
-                      </option>
-                    ))}
-                  </select>
+                    value={p.year}
+                    label="Filter by consumed year"
+                    autoSubmit
+                    options={[
+                      { value: "", label: "Year", icon: "calendar" },
+                      ...years.map((y) => ({ value: String(y), label: String(y), icon: "calendar" as const })),
+                    ]}
+                  />
                 </>
               ) : (
-                <select
-                  class={p.status ? "ui-filter-select ui-filter-select--active" : "ui-filter-select"}
+                <IconMenu
+                  variant="filter"
                   name="status"
-                  aria-label="Filter by status"
-                  data-active={p.status ? "true" : undefined}
-                  data-filter-auto=""
-                >
-                  <option value="">Status</option>
-                  {STATUSES.map((s) => (
-                    <option value={s} selected={s === p.status}>
-                      {s}
-                    </option>
-                  ))}
-                </select>
+                  value={p.status}
+                  label="Filter by status"
+                  autoSubmit
+                  options={[
+                    { value: "", label: "Status", icon: "sliders-horizontal" },
+                    ...STATUSES.map((s) => ({
+                      value: s,
+                      label: s,
+                      icon: STATUS_META[s]?.icon ?? "clock",
+                    })),
+                  ]}
+                />
               )}
-              <select
-                class={p.tier ? "ui-filter-select ui-filter-select--active" : "ui-filter-select"}
+              <IconMenu
+                variant="filter"
                 name="tier"
-                aria-label="Filter by tier"
-                data-active={p.tier ? "true" : undefined}
-                data-filter-auto=""
-              >
-                <option value="">Tier</option>
-                {TIERS.map((t) => (
-                  <option value={t} selected={t === p.tier}>
-                    {`Tier ${t}`}
-                  </option>
-                ))}
-              </select>
+                value={p.tier}
+                label="Filter by tier"
+                autoSubmit
+                options={[
+                  { value: "", label: "Tier", icon: "award" },
+                  ...TIERS.map((t) => ({ value: t, label: `Tier ${t}`, icon: "award" as const })),
+                ]}
+              />
             </div>
             <div class="ui-filter-group">
               <FilterToggle name="rated" state={p.rated} anyLabel="Rating" yesLabel="Has rating" noLabel="No rating" />

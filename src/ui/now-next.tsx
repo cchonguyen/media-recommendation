@@ -6,7 +6,7 @@ import { MEDIA_TYPES, TIERS, mediaItems } from "../db/schema";
 import type { MediaItem } from "../db/schema";
 import { isMediaType } from "../api/validate";
 import { Layout, loadStatusStrip } from "./layout";
-import { Field, MEDIA_TYPE_ICON, Missing, Pill, SelectBox, StarRating } from "./controls";
+import { Field, IconMenu, MEDIA_TYPE_ICON, Missing, Pill, StarRating } from "./controls";
 import { Icon } from "./icons";
 import { createLibraryRoutes } from "./library";
 import { createListsUiRoutes } from "./lists";
@@ -67,12 +67,16 @@ function RateForm(props: { id: string; action: "complete" | "rate"; label: strin
         <StarRating id={`${base}-rating`} name="rating" value={3} label="Rating" mode="form" />
       </Field>
       <Field id={`${base}-tier`} label="Tier">
-        <SelectBox id={`${base}-tier`} name="tier">
-          <option value="">None</option>
-          {TIERS.map((t) => (
-            <option value={t}>{t}</option>
-          ))}
-        </SelectBox>
+        <IconMenu
+          id={`${base}-tier`}
+          name="tier"
+          value=""
+          label="Tier"
+          options={[
+            { value: "", label: "None", icon: "award" },
+            ...TIERS.map((t) => ({ value: t, label: t, icon: "award" as const })),
+          ]}
+        />
       </Field>
       <Field id={`${base}-note`} label="Short note">
         <textarea class="ui-textarea" id={`${base}-note`} name="review_text" rows={2} maxlength={10000} placeholder="Add a short note (optional)" />
@@ -207,27 +211,31 @@ export function createUiRoutes(options: { now?: () => Date } = {}) {
           </h2>
           <form class="app-form" method="get" action="/">
             <Field id="f-type" label="Type">
-              <SelectBox id="f-type" name="type">
-                <option value="">All types</option>
-                {MEDIA_TYPES.map((t) => (
-                  <option value={t} selected={t === type}>
-                    {t}
-                  </option>
-                ))}
-              </SelectBox>
+              <IconMenu
+                id="f-type"
+                name="type"
+                value={type}
+                label="Type"
+                options={[
+                  { value: "", label: "All types", icon: "layers" },
+                  ...MEDIA_TYPES.map((t) => ({ value: t, label: t, icon: MEDIA_TYPE_ICON[t] ?? "film" })),
+                ]}
+              />
             </Field>
             <Field id="f-streaming" label="Streaming service">
               <input class="ui-input" id="f-streaming" type="text" name="streaming" value={streaming} maxlength={100} placeholder="Any service" />
             </Field>
             <Field id="f-time" label="Time commitment">
-              <SelectBox id="f-time" name="time">
-                <option value="">Any length</option>
-                {TIME_BUCKETS.map((b) => (
-                  <option value={b.value} selected={b.value === time}>
-                    {b.label}
-                  </option>
-                ))}
-              </SelectBox>
+              <IconMenu
+                id="f-time"
+                name="time"
+                value={time}
+                label="Time commitment"
+                options={[
+                  { value: "", label: "Any length", icon: "clock" },
+                  ...TIME_BUCKETS.map((b) => ({ value: b.value, label: b.label, icon: "clock" as const })),
+                ]}
+              />
             </Field>
             <button type="submit" class="ui-btn">
               Filter
@@ -279,11 +287,13 @@ export function createUiRoutes(options: { now?: () => Date } = {}) {
               <input class="ui-input" id="add-title" type="text" name="title" required maxlength={300} placeholder="What do you want to track?" />
             </Field>
             <Field id="add-type" label="Type">
-              <SelectBox id="add-type" name="media_type">
-                {MEDIA_TYPES.map((t) => (
-                  <option value={t}>{t}</option>
-                ))}
-              </SelectBox>
+              <IconMenu
+                id="add-type"
+                name="media_type"
+                value={MEDIA_TYPES[0]}
+                label="Type"
+                options={MEDIA_TYPES.map((t) => ({ value: t, label: t, icon: MEDIA_TYPE_ICON[t] ?? "film" }))}
+              />
             </Field>
             <button type="submit" class="ui-btn ui-btn--primary">
               <Icon name="plus" />
