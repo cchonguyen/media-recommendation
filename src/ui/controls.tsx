@@ -79,6 +79,62 @@ export const STATUS_META: Record<string, { icon: IconName; tone: "neutral" | "mi
   Archived: { icon: "archive", tone: "neutral" },
 };
 
+export interface MenuOption {
+  value: string;
+  label: string;
+  icon: IconName;
+  tone?: "neutral" | "mid" | "good" | "warn" | "bad";
+}
+
+export function IconMenu(props: {
+  id?: string;
+  name?: string;
+  value: string;
+  label: string;
+  options: MenuOption[];
+  variant?: "field" | "filter" | "icon" | "status";
+  inputAttrs?: Record<string, string>;
+  autoSubmit?: boolean;
+}) {
+  const variant = props.variant ?? "field";
+  const selected = props.options.find((o) => o.value === props.value) ?? props.options[0]!;
+  const optsJson = JSON.stringify(props.options.map((o) => (o.tone ? { v: o.value, l: o.label, i: o.icon, t: o.tone } : { v: o.value, l: o.label, i: o.icon })));
+  let triggerClass = "ui-btn app-menu-trigger";
+  if (variant === "icon") triggerClass = "ui-icon-btn app-menu-trigger--icon";
+  else if (variant === "status") triggerClass = `ui-btn app-menu-trigger app-status-select app-status-select--${selected.tone ?? "neutral"}`;
+  else if (variant === "filter") triggerClass = props.value ? "ui-filter-toggle ui-filter-toggle--yes app-filter-menu" : "ui-filter-toggle app-filter-menu";
+  return (
+    <div class="app-menu-wrap" data-menu-variant={variant}>
+      <input
+        type="hidden"
+        id={props.id}
+        name={props.name}
+        value={props.value}
+        {...(props.inputAttrs ?? {})}
+        {...(props.autoSubmit ? { "data-filter-auto": "" } : {})}
+      />
+      <button
+        type="button"
+        class={triggerClass}
+        data-action="open-menu"
+        aria-haspopup="listbox"
+        aria-expanded="false"
+        aria-label={props.label}
+        title={variant === "icon" ? selected.label : undefined}
+        data-menu-options={optsJson}
+      >
+        <Icon name={selected.icon} size={16} />
+        {variant === "icon" ? null : (
+          <>
+            <span class="app-menu-trigger__label">{selected.label}</span>
+            <Icon name="chevron-down" size={14} />
+          </>
+        )}
+      </button>
+    </div>
+  );
+}
+
 export function StarRating(props: {
   id?: string;
   itemId?: string;

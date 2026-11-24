@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { and, asc, desc, eq, ne, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import { MEDIA_TYPES, curatedListItems, curatedLists, mediaItems } from "../db/schema";
-import { Field, SelectBox } from "./controls";
+import { Field, IconMenu, MEDIA_TYPE_ICON } from "./controls";
 import { Icon } from "./icons";
 import { Layout, loadStatusStrip } from "./layout";
 
@@ -11,14 +11,16 @@ const LIMIT = 100;
 function TypeSelect(props: { id: string; name: string; selected?: string | null; blank: string }) {
   return (
     <Field id={props.id} label="Media type">
-      <SelectBox id={props.id} name={props.name} label="Media type">
-        <option value="">{props.blank}</option>
-        {MEDIA_TYPES.map((t) => (
-          <option value={t} selected={t === props.selected}>
-            {t}
-          </option>
-        ))}
-      </SelectBox>
+      <IconMenu
+        id={props.id}
+        name={props.name}
+        value={props.selected ?? ""}
+        label="Media type"
+        options={[
+          { value: "", label: props.blank, icon: "layers" },
+          ...MEDIA_TYPES.map((t) => ({ value: t, label: t, icon: MEDIA_TYPE_ICON[t] ?? "film" })),
+        ]}
+      />
     </Field>
   );
 }
