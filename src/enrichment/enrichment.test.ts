@@ -148,6 +148,24 @@ describe("tmdb adapter", () => {
     expect((err as Error).message).toContain("401");
     expect((err as Error).message).not.toContain(TMDB_KEY);
   });
+
+  it("uses the future US theatrical date in releaseAccessDisplay when global release_date is past", async () => {
+    const f = routedFetch({
+      [`${TMDB}/search/movie`]: movieSearch({ id: 99, title: "Look Back", release_date: "2026-09-11" }),
+      [`${TMDB}/movie/99`]: movieDetails({
+        id: 99,
+        title: "Look Back",
+        release_date: "2026-09-11",
+        release_dates: { results: [{ iso_3166_1: "US", release_dates: [{ type: 3, release_date: "2026-12-18T00:00:00Z" }] }] },
+        "watch/providers": { results: {} },
+      }),
+    });
+    const r = await fetchTmdbMetadata({ ...args, title: "Look Back", yearHint: null, fetchImpl: f.fetchImpl });
+    expect(r).toMatchObject({
+      kind: "ok",
+      fields: { releaseState: "Upcoming", releaseDate: "2026-09-11", releaseAccessDisplay: "Releases 2026-12-18" },
+    });
+  });
 });
 
 describe("omdb adapter", () => {
@@ -217,6 +235,25 @@ describe("runEnrichmentQueue", () => {
     await runEnrichmentQueue({ db: db2, env: { TMDB_API_KEY: TMDB_KEY }, fetchImpl: f2.fetchImpl, now: () => NOW });
     expect(await get(db2, "b")).toMatchObject({ enrichmentStatus: "ENRICHED", criticScore: null });
     expect(f2.calls.some((c) => c.url.includes("omdbapi"))).toBe(false);
+  });
+
+  it("falls back to TMDB vote_average when OMDb fails or returns empty, and prefers OMDb when available", async () => {
+    const { db } = setup();
+    await seed(db, { id: "a", title: "Dune" });
+    const f = happyRoutes({
+      [`${TMDB}/movie/438631`]: movieDetails({ vote_average: 7.8, vote_count: 1500 }),
+      "www.omdbapi.com/": new Response("x", { status: 401 }),
+    });
+    await run(db, f);
+    expect(await get(db, "a")).toMatchObject({ enrichmentStatus: "ENRICHED", criticScore: 78, criticScoreDisplay: "TMDB 7.8" });
+
+    const { db: db2 } = setup();
+    await seed(db2, { id: "b", title: "Dune" });
+    const f2 = happyRoutes({
+      [`${TMDB}/movie/438631`]: movieDetails({ vote_average: 7.8, vote_count: 1500 }),
+    });
+    await run(db2, f2);
+    expect(await get(db2, "b")).toMatchObject({ enrichmentStatus: "ENRICHED", criticScore: 78.5, criticScoreDisplay: "RT 83% · MC 74" });
   });
 
   it("processes oldest first, capped at 10, skipping attempts>=3 and non-PENDING rows", async () => {

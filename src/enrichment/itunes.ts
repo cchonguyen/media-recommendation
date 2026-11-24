@@ -45,6 +45,8 @@ export const itunesEnricher: Enricher = {
         posterImageUrl: p.artworkUrl600 ?? "",
         categoryMetadataJson: JSON.stringify({ feedUrl: p.feedUrl ?? "" }),
         releaseState: "Published",
+        releaseAccessDisplay: "Published",
+        isAvailableNow: true,
       },
     };
   },

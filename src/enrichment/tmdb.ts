@@ -57,6 +57,8 @@ interface Details {
   poster_path?: string | null;
   genres?: { name: string }[];
   created_by?: { name: string }[];
+  vote_average?: number;
+  vote_count?: number;
   external_ids?: { imdb_id?: string | null };
   credits?: { crew?: { job?: string; name: string }[] };
   release_dates?: { results?: { iso_3166_1: string; release_dates: ReleaseDateEntry[] }[] };
@@ -98,6 +100,13 @@ export function pickSearchHit(hits: SearchHit[], title: string): SearchHit | und
 
 const dateOnly = (iso: string) => iso.slice(0, 10);
 const dayNumber = (iso: string) => Date.parse(`${dateOnly(iso)}T00:00:00Z`) / DAY_MS;
+
+function earliestUsTheatricalDate(usReleases: ReleaseDateEntry[]): string | null {
+  const theatrical = usReleases
+    .filter((r) => (r.type === 3 || r.type === 2) && r.release_date)
+    .sort((a, b) => dayNumber(a.release_date) - dayNumber(b.release_date));
+  return theatrical[0] ? dateOnly(theatrical[0].release_date) : null;
+}
 
 export type MovieReleaseState = "Upcoming" | "In_Theaters_Wide" | "In_Theaters_Limited" | "Streaming" | "Published";
 
@@ -191,6 +200,7 @@ export async function fetchTmdbById(a: TmdbByIdArgs): Promise<TmdbResult> {
   const poster = d.poster_path ? `${IMG}${d.poster_path}` : "";
   const imdbId = (isMovie ? d.imdb_id : (d.external_ids?.imdb_id ?? d.imdb_id)) || null;
 
+  const hasTmdbScore = typeof d.vote_average === "number" && d.vote_average > 0 && (d.vote_count ?? 0) >= 10;
   const base: EnrichedFields = {
     tmdbId: String(d.id),
     imdbId,
@@ -199,11 +209,18 @@ export async function fetchTmdbById(a: TmdbByIdArgs): Promise<TmdbResult> {
     genresJson: JSON.stringify((d.genres ?? []).map((g) => g.name)),
     streamingProvidersJson: JSON.stringify(providers),
     posterImageUrl: poster,
+    ...(hasTmdbScore
+      ? {
+          criticScore: Math.round(d.vote_average! * 100) / 10,
+          criticScoreDisplay: `TMDB ${d.vote_average!.toFixed(1)}`,
+        }
+      : {}),
   };
 
   if (isMovie) {
     const us = d.release_dates?.results?.find((r) => r.iso_3166_1 === "US")?.release_dates ?? [];
     const state = deriveMovieReleaseState({ usReleases: us, releaseDate, hasFlatrate: providers.length > 0, now: a.now });
+    const displayDate = state === "Upcoming" ? (earliestUsTheatricalDate(us) ?? releaseDate) : releaseDate;
     const directors = (d.credits?.crew ?? []).filter((c) => c.job === "Director").map((c) => c.name);
     const runtime = d.runtime && d.runtime > 0 ? d.runtime : null;
     return {
@@ -214,7 +231,7 @@ export async function fetchTmdbById(a: TmdbByIdArgs): Promise<TmdbResult> {
         timeCommitmentMinutes: runtime,
         timeCommitmentDisplay: runtime ? formatRuntime(runtime) : "",
         releaseState: state,
-        releaseAccessDisplay: accessDisplay(state, providers, releaseDate),
+        releaseAccessDisplay: accessDisplay(state, providers, displayDate),
         isAvailableNow: providers.length > 0 || state === "In_Theaters_Wide" || state === "In_Theaters_Limited",
       },
     };

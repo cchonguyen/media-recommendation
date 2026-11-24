@@ -23,6 +23,7 @@ export type Env = {
   OMDB_API_KEY?: string;
   TWITCH_CLIENT_ID?: string;
   TWITCH_CLIENT_SECRET?: string;
+  GOOGLE_BOOKS_API_KEY?: string;
   WEBHOOK_SECRET?: string;
   INBOX_DOC_ID?: string;
   BACKUP_SHEET_ID?: string;
