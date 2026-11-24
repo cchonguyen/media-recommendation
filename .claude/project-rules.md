@@ -11,6 +11,6 @@ This file is owned by this project. The harness never overwrites it.
 - `/share/:slug` reads only the public column allowlist in `.spec/SYSTEM_SPEC.md` section 3, invariant 9.
 - Tests never call live external APIs. Inject `fetch` and stub it.
 - Standing approval (Charlie, 2026-11-11): commits and merges for the slices in `.spec/PROGRESS.md` proceed without further confirmation once checks are green. Questions for the owner are banked until the last slice.
-- Standing approval (Charlie, 2026-11-24): whenever code changes are verified and ready to report "done", commit them on a branch, push, open a PR against main, wait for required checks to pass, merge into main (to trigger the GitHub Actions deploy; never deploy locally), delete the branch, and fast-forward local main before reporting done.
+- Standing approval (Charlie, 2026-11-24): "done" means live in production. Whenever changes are verified, commit on a branch, push, open a PR against main, wait for required PR checks to pass, merge into main (never deploy locally), delete the branch, fast-forward local main, and wait for the GitHub Actions Deploy workflow on main to finish with success before reporting done.
 
 ## Pending Rule Candidates — not in force
