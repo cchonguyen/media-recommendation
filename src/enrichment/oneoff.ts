@@ -114,7 +114,7 @@ export const oneOffEnricher: Enricher = {
   subrequestsNeeded: () => 1,
   hasCredentials: () => true,
   async enrich(ctx: EnrichContext): Promise<EnrichOutcome> {
-    const fields: EnrichedFields = { releaseState: "Published" };
+    const fields: EnrichedFields = { releaseState: "Published", releaseAccessDisplay: "Published", isAvailableNow: true };
     const raw = findUrl(ctx.row);
     const url = raw ? safeHttpUrl(raw) : null;
     if (!url) return { kind: "ok", fields };

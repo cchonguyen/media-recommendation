@@ -14,6 +14,7 @@ export interface OmdbArgs {
 
 interface OmdbResponse {
   Response?: string;
+  Error?: string;
   imdbRating?: string;
   Ratings?: { Source?: string; Value?: string }[];
 }
@@ -67,9 +68,15 @@ export async function fetchOmdbRatings(args: OmdbArgs): Promise<OmdbRatings> {
     url.searchParams.set("i", args.imdbId);
     url.searchParams.set("apikey", args.apiKey);
     const res = await (args.fetchImpl ?? fetch)(url.href);
-    if (!res.ok) return EMPTY;
+    if (!res.ok) {
+      console.warn(`OMDb returned HTTP ${res.status} for ${args.imdbId}`);
+      return EMPTY;
+    }
     const body = (await res.json()) as OmdbResponse;
-    if (body.Response === "False") return EMPTY;
+    if (body.Response === "False") {
+      console.warn(`OMDb rejected ${args.imdbId}: ${body.Error ?? "unknown error"}`);
+      return EMPTY;
+    }
     return parseOmdbRatings(body);
   } catch {
     return EMPTY;

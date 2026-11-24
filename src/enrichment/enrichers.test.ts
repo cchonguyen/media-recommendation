@@ -59,6 +59,8 @@ describe("igdb", () => {
         releaseYear: 2022,
         releaseDate: "2022-02-25",
         releaseState: "Published",
+        releaseAccessDisplay: "Published",
+        isAvailableNow: true,
         genresJson: '["RPG"]',
         creator: "FromSoftware",
         posterImageUrl: "https://images.igdb.com/igdb/image/upload/t_cover_big/co4jni.jpg",
@@ -98,6 +100,16 @@ describe("igdb", () => {
     expect(pickGame(g, "doom", null)!.id).toBe(2);
     expect(pickGame(g, "doom", 1993)!.id).toBe(1);
     expect(pickGame(g, "nope", null)!.id).toBe(3);
+    expect(
+      pickGame(
+        [
+          { id: 10, name: "Alan Wake 2", game_type: 1, first_release_date: unix("2024-10-22") },
+          { id: 11, name: "Alan Wake 2", game_type: 0, first_release_date: unix("2023-10-27") },
+        ],
+        "Alan Wake 2",
+        null,
+      )!.id,
+    ).toBe(11);
     expect(pickGame([], "x", null)).toBeUndefined();
     expect(formatHours(45)).toBe("~45 min");
   });
@@ -136,6 +148,17 @@ describe("igdb", () => {
 });
 
 const BOOKS = "www.googleapis.com/books/v1/volumes";
+const OPEN_LIBRARY = "openlibrary.org/search.json";
+const olDoc = (over: Record<string, unknown> = {}) => ({
+  title: "Project Hail Mary",
+  author_name: ["Andy Weir"],
+  first_publish_year: 2021,
+  isbn: ["0593135202", "9780593135204"],
+  number_of_pages_median: 476,
+  subject: ["Fiction", "nyt:bestseller=2021", "Science fiction"],
+  cover_i: 12345,
+  ...over,
+});
 const volume = (over: Record<string, unknown> = {}) => ({
   volumeInfo: {
     title: "Project Hail Mary",
@@ -157,7 +180,7 @@ describe("books", () => {
   it("maps a volume with an ISBN-based Amazon link", async () => {
     const { db } = setup();
     const f = routedFetch({ [BOOKS]: { items: [volume()] } });
-    const r = await booksEnricher.enrich(ctx(db, f, r0));
+    const r = await booksEnricher.enrich(ctx(db, f, r0, { ...env, GOOGLE_BOOKS_API_KEY: "bk-test" }));
     expect(r).toEqual({
       kind: "ok",
       fields: {
@@ -166,6 +189,8 @@ describe("books", () => {
         releaseYear: 2021,
         releaseDate: "2021-05-04",
         releaseState: "Published",
+        releaseAccessDisplay: "Published",
+        isAvailableNow: true,
         genresJson: '["Fiction"]',
         timeCommitmentDisplay: "476 pages",
         timeCommitmentMinutes: 952,
@@ -173,26 +198,59 @@ describe("books", () => {
         amazonLink: "https://www.amazon.com/s?k=9780593135204",
       },
     });
-    expect(new URL(f.calls[0]!.url).searchParams.get("q")).toBe("intitle:Project Hail Mary");
-    expect(new URL(f.calls[0]!.url).searchParams.has("key")).toBe(false);
+    expect(new URL(f.calls[0]!.url).searchParams.get("q")).toBe('intitle:"Project Hail Mary"');
+    expect(new URL(f.calls[0]!.url).searchParams.get("key")).toBe("bk-test");
+  });
+
+  it("uses Open Library directly when GOOGLE_BOOKS_API_KEY is absent", async () => {
+    const { db } = setup();
+    const f = routedFetch({ [OPEN_LIBRARY]: { docs: [olDoc()] } });
+    const r = await booksEnricher.enrich(ctx(db, f, r0));
+    expect(r).toEqual({
+      kind: "ok",
+      fields: {
+        isbn13: "9780593135204",
+        creator: "Andy Weir",
+        releaseYear: 2021,
+        releaseDate: null,
+        releaseState: "Published",
+        releaseAccessDisplay: "Published",
+        isAvailableNow: true,
+        genresJson: '["Fiction","Science fiction"]',
+        timeCommitmentDisplay: "476 pages",
+        timeCommitmentMinutes: 952,
+        posterImageUrl: "https://covers.openlibrary.org/b/id/12345-L.jpg",
+        amazonLink: "https://www.amazon.com/s?k=9780593135204",
+      },
+    });
+    expect(f.calls).toHaveLength(1);
+    expect(f.calls[0]!.url).toContain("openlibrary.org");
+  });
+
+  it("falls back to Open Library when Google Books returns 429", async () => {
+    const { db } = setup();
+    const f = routedFetch({ [BOOKS]: new Response("rate", { status: 429 }), [OPEN_LIBRARY]: { docs: [olDoc()] } });
+    const r = await booksEnricher.enrich(ctx(db, f, r0, { ...env, GOOGLE_BOOKS_API_KEY: "bk-test" }));
+    expect(r).toMatchObject({ kind: "ok", fields: { isbn13: "9780593135204", creator: "Andy Weir", isAvailableNow: true } });
+    expect(f.calls).toHaveLength(2);
   });
 
   it("falls back to the encoded title without an ISBN, sends the optional key, handles year-only dates", async () => {
     const { db } = setup();
     const f = routedFetch({ [BOOKS]: { items: [volume({ industryIdentifiers: [], publishedDate: "2031", pageCount: undefined })] } });
     const r = await booksEnricher.enrich(ctx(db, f, r0, { ...env, GOOGLE_BOOKS_API_KEY: "bk" }));
-    expect(r).toMatchObject({ kind: "ok", fields: { isbn13: null, amazonLink: "https://www.amazon.com/s?k=Project%20Hail%20Mary", releaseDate: null, releaseState: "Upcoming", timeCommitmentDisplay: "" } });
+    expect(r).toMatchObject({ kind: "ok", fields: { isbn13: null, amazonLink: "https://www.amazon.com/s?k=Project%20Hail%20Mary", releaseDate: null, releaseState: "Upcoming", releaseAccessDisplay: "Releases 2031", isAvailableNow: false, timeCommitmentDisplay: "" } });
     expect(new URL(f.calls[0]!.url).searchParams.get("key")).toBe("bk");
     expect(amazonLink(null, "A & B")).toBe("https://www.amazon.com/s?k=A%20%26%20B");
   });
 
   it("returns not-found, and errors omit the key", async () => {
     const { db } = setup();
-    const none = routedFetch({ [BOOKS]: { totalItems: 0 } });
+    const none = routedFetch({ [OPEN_LIBRARY]: { docs: [] } });
     expect(await booksEnricher.enrich(ctx(db, none, r0))).toEqual({ kind: "not-found" });
-    const bad = routedFetch({ [BOOKS]: new Response("x", { status: 429 }) });
+    const bad = routedFetch({ [BOOKS]: new Response("x", { status: 403 }) });
     const err = await booksEnricher.enrich(ctx(db, bad, r0, { ...env, GOOGLE_BOOKS_API_KEY: "bk-SECRET" })).catch((e: Error) => e);
-    expect((err as Error).message).toContain("429");
+    expect((err as Error).message).toContain("403");
     expect((err as Error).message).not.toContain("bk-SECRET");
     expect(booksEnricher.hasCredentials({})).toBe(true);
   });
@@ -214,6 +272,8 @@ describe("itunes", () => {
         posterImageUrl: "https://img/600.jpg",
         categoryMetadataJson: '{"feedUrl":"https://feeds.example/daily"}',
         releaseState: "Published",
+        releaseAccessDisplay: "Published",
+        isAvailableNow: true,
       },
     });
     const u = new URL(f.calls[0]!.url);
@@ -261,7 +321,7 @@ describe("one-off", () => {
     const { db } = setup();
     const f = routedFetch({});
     const r = await oneOffEnricher.enrich(ctx(db, f, oneOff({ rawInput: "Think about X", title: "Think about X" })));
-    expect(r).toEqual({ kind: "ok", fields: { releaseState: "Published" } });
+    expect(r).toEqual({ kind: "ok", fields: { releaseState: "Published", releaseAccessDisplay: "Published", isAvailableNow: true } });
     expect(f.calls).toHaveLength(0);
   });
 
@@ -304,6 +364,7 @@ describe("queue with all enrichers", () => {
       [GAMES]: [elden],
       [BEATS]: [{ normally: 43200 }],
       [BOOKS]: { items: [volume()] },
+      [OPEN_LIBRARY]: { docs: [olDoc()] },
       "itunes.apple.com/search": { results: [{ collectionId: 7, collectionName: "Pod", artistName: "Host", trackCount: 3 }] },
       "example.com/x": new Response(`<meta property="og:site_name" content="Ex">`),
     });
@@ -380,6 +441,7 @@ describe("Stage 2 merge on igdb_id, isbn13, itunes_id", () => {
         [GAMES]: [elden],
         [BEATS]: [],
         [BOOKS]: { items: [volume()] },
+      [OPEN_LIBRARY]: { docs: [olDoc()] },
         "itunes.apple.com/search": { results: [{ collectionId: 7, collectionName: "Pod" }] },
       });
       const s = await runEnrichmentQueue({ db, env, fetchImpl: ff.fetchImpl, now: () => NOW });

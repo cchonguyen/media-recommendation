@@ -41,8 +41,10 @@ const tmdbEnricher = (mediaType: "Movie" | "TV"): Enricher => ({
         fetchImpl: ctx.fetchImpl,
         budget: ctx.budget,
       });
-      fields.criticScore = r.criticScore;
-      fields.criticScoreDisplay = r.criticScoreDisplay;
+      if (r.criticScore !== null) {
+        fields.criticScore = r.criticScore;
+        fields.criticScoreDisplay = r.criticScoreDisplay;
+      }
     }
     return { kind: "ok", fields };
   },

@@ -23,6 +23,7 @@ interface IgdbGame {
   id: number;
   name?: string;
   first_release_date?: number;
+  game_type?: number;
   genres?: { name: string }[];
   involved_companies?: { developer?: boolean; company?: { name?: string } }[];
   cover?: { image_id?: string };
@@ -76,11 +77,13 @@ async function igdbPost<T>(url: string, query: string, token: string, a: CallArg
 const norm = (s: string | undefined) => (s ?? "").trim().toLowerCase();
 const yearOf = (g: IgdbGame) => (g.first_release_date ? new Date(g.first_release_date * 1000).getUTCFullYear() : null);
 
-/** Exact title first, then the year hint, then the most recent release. */
+/** Exact title first, then main games (game_type === 0) if present, then year hint, then most recent release. */
 export function pickGame(games: IgdbGame[], title: string, yearHint: number | null): IgdbGame | undefined {
   if (games.length === 0) return undefined;
   const exact = games.filter((g) => norm(g.name) === norm(title));
   let pool = exact.length > 0 ? exact : games;
+  const mainGames = pool.filter((g) => g.game_type === 0);
+  if (mainGames.length > 0) pool = mainGames;
   if (yearHint != null) {
     const byYear = pool.filter((g) => yearOf(g) === yearHint);
     if (byYear.length > 0) pool = byYear;
@@ -107,7 +110,7 @@ export const igdbEnricher: Enricher = {
     const title = ctx.row.title.replace(/["\\]/g, " ");
     const games = await igdbPost<IgdbGame[]>(
       GAMES_URL,
-      `search "${title}"; fields name,first_release_date,genres.name,involved_companies.company.name,involved_companies.developer,cover.image_id,url,summary,platforms.name,total_rating; limit 5;`,
+      `search "${title}"; fields name,first_release_date,game_type,genres.name,involved_companies.company.name,involved_companies.developer,cover.image_id,url,summary,platforms.name,total_rating; limit 10;`,
       token,
       a,
     );
@@ -131,6 +134,7 @@ export const igdbEnricher: Enricher = {
 
     const date = g.first_release_date ? new Date(g.first_release_date * 1000).toISOString().slice(0, 10) : null;
     const today = ctx.now.toISOString().slice(0, 10);
+    const releaseState = date ? (date > today ? "Upcoming" : "Published") : "Unknown";
     const developer = (g.involved_companies ?? []).find((c) => c.developer)?.company?.name ?? "";
     const score = typeof g.total_rating === "number" ? g.total_rating : null;
     return {
@@ -139,7 +143,9 @@ export const igdbEnricher: Enricher = {
         igdbId: String(g.id),
         releaseYear: yearOf(g),
         releaseDate: date,
-        releaseState: date ? (date > today ? "Upcoming" : "Published") : "Unknown",
+        releaseState,
+        releaseAccessDisplay: releaseState === "Upcoming" ? (date ? `Releases ${date}` : "Upcoming") : releaseState === "Published" ? "Published" : "Unknown",
+        isAvailableNow: releaseState === "Published",
         genresJson: JSON.stringify((g.genres ?? []).map((x) => x.name)),
         creator: developer,
         posterImageUrl: g.cover?.image_id ? `https://images.igdb.com/igdb/image/upload/t_cover_big/${g.cover.image_id}.jpg` : "",
