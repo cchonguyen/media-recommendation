@@ -276,8 +276,8 @@ describe("design system guards", () => {
   it("uses kit classes only and no legacy classes or inline styles", async () => {
     for (const [p, html] of await pages()) {
       const tags = (name: string) => html.match(new RegExp(`<${name}\\b[^>]*>`, "g")) ?? [];
-      for (const t of tags("button")) expect(t, `${p} ${t}`).toMatch(/class="[^"]*\bui-(btn|icon-btn|toast__action|segmented__opt)\b/);
-      for (const t of tags("select")) expect(t, `${p} ${t}`).toMatch(/class="[^"]*\bui-select\b/);
+      for (const t of tags("button")) expect(t, `${p} ${t}`).toMatch(/class="[^"]*\bui-(btn|icon-btn|toast__action|segmented__opt|filter-toggle)\b/);
+      for (const t of tags("select")) expect(t, `${p} ${t}`).toMatch(/class="[^"]*\bui-(select|filter-select)\b/);
       for (const t of tags("textarea")) expect(t, `${p} ${t}`).toMatch(/class="[^"]*\bui-textarea\b/);
       for (const t of tags("input")) {
         if (/type="text"/.test(t)) expect(t, `${p} ${t}`).toMatch(/class="[^"]*\bui-input\b/);
@@ -342,6 +342,37 @@ describe("design system guards", () => {
     // Status uses icon + text wrapper with tone class
     expect(lib).toContain('class="app-status-select app-status-select--neutral"');
     expect(lib).toContain('class="app-status-select__face"');
+  });
+
+  it("Library and Completed Archive adopt the Harness UI Filters pattern", async () => {
+    const h = harness();
+    await seed(h.db, { id: "m1", title: "Tier S Movie", mediaType: "Movie", status: "Backlog", personalTier: "S", myRating: 4.5, personalNotes: "Must watch" });
+    await seed(h.db, { id: "m2", title: "Unrated Movie", mediaType: "Movie", status: "Backlog", personalTier: null, myRating: null, personalNotes: "" });
+    await seed(h.db, { id: "c1", title: "Reviewed Book", mediaType: "Book", status: "Completed", consumedYear: 2025, myRating: 5, reviewText: "Great read" });
+    await seed(h.db, { id: "c2", title: "Unreviewed Book", mediaType: "Book", status: "Completed", consumedYear: 2024, myRating: null, reviewText: "" });
+
+    expect(STYLES).toContain(".ui-filter-bar");
+    expect(STYLES).toContain(".ui-filter-panel");
+
+    const libDefault = await (await h.get("/library/movies")).text();
+    expect(libDefault).toContain('class="ui-filter-bar"');
+    expect(libDefault).toContain("ui-filter-trigger");
+    expect(libDefault).toContain('class="ui-filter-panel" id="filter-panel" hidden');
+    expect(libDefault).toContain("ui-filter-select");
+    expect(libDefault).toContain("ui-filter-toggle");
+
+    const libFiltered = await (await h.get("/library/movies?tier=S&has_notes=yes")).text();
+    expect(libFiltered).toContain("Filters (2)");
+    expect(libFiltered).toContain('aria-expanded="true"');
+    expect(libFiltered).toContain("ui-filter-trigger--active");
+    expect(libFiltered).toContain("app-filter-chip");
+    expect(libFiltered).toContain("Tier S Movie");
+    expect(libFiltered).not.toContain("Unrated Movie");
+
+    const archFiltered = await (await h.get("/library/completed?rated=yes&has_review=yes")).text();
+    expect(archFiltered).toContain("Filters (2)");
+    expect(archFiltered).toContain("Reviewed Book");
+    expect(archFiltered).not.toContain("Unreviewed Book");
   });
 
   it("STYLES carries the azure accent and Newsreader, and no legacy block", () => {

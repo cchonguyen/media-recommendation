@@ -305,6 +305,21 @@ export const CLIENT_SCRIPT = `
         if (tr) rbody.tier = tr;
         cellDone(call("POST", itemUrl(id) + "/rating", rbody), el);
       }
+    } else if (a === "toggle-filters") {
+      var panelId = el.getAttribute("aria-controls") || "filter-panel";
+      var panel = document.getElementById(panelId);
+      if (panel) {
+        panel.hidden = !panel.hidden;
+        el.setAttribute("aria-expanded", panel.hidden ? "false" : "true");
+      }
+    } else if (a === "filter-toggle") {
+      var fform = el.closest ? el.closest("[data-filter-form]") : null;
+      var fname = el.getAttribute("data-filter-name");
+      if (!fform || !fname) return;
+      var finp = fform.querySelector('input[type="hidden"][name="' + fname + '"]');
+      if (!finp) return;
+      finp.value = finp.value === "" ? "yes" : finp.value === "yes" ? "no" : "";
+      fform.submit();
     }
   });
   function cellDone(p, el) {
@@ -317,6 +332,11 @@ export const CLIENT_SCRIPT = `
   function itemUrl(id) { return "/api/items/" + encodeURIComponent(id); }
   document.addEventListener("change", function (ev) {
     var el = ev.target;
+    if (el.hasAttribute && el.hasAttribute("data-filter-auto")) {
+      var fform = el.closest ? el.closest("[data-filter-form]") : null;
+      if (fform) fform.submit();
+      return;
+    }
     var a = el.getAttribute && el.getAttribute("data-action");
     if (!a) return;
     var id = el.getAttribute("data-id");
