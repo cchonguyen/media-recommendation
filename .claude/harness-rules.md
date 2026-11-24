@@ -1,9 +1,9 @@
 # Claude Code Harness Contract (v3.2)
 
-## Core Communication & Silent Batching Rules
+## Core Communication Rules
 - **Substantive Inception:** Start immediately with output or action. Zero pleasantries, apologies, or filler.
-- **Anti-Echo Protocol (always):** Never reprint full files, unchanged code blocks, `.spec/HANDOFF_PACKET.md`, or `.spec/BRIEFING_PACKET.md`.
-- **Silent Batching & 1-Line Receipts:** Hooks and scripts automatically queue operational telemetry into `.spec/STATUS_BATCH.jsonl` for the Gemini Briefing Agent. When an autonomous slash command (`/init-harness`, `/triage`, `/spec`, `/implement`, `/prep-audit`, `/ingest-feedback`, `/sync-harness`, `/learn`, `/checkpoint-handoff`, `/prep-debug`, `/review-pr`, `/pickup`, `/brief`) completes, output ONLY a 1-line receipt (e.g., `✓ Updated .spec/PROGRESS.md: Slice 2 verified.`). Never spend chat output tokens narrating multi-paragraph status updates under the hood; delegate status digests to `.spec/OVERVIEW.md` (at milestones) and the Gemini Briefing Agent (`/brief` or Antigravity `brief me`).
+- **Anti-Echo Protocol (always):** Never reprint full files, unchanged code blocks, or `.spec/HANDOFF_PACKET.md`.
+- **1-Line Receipts:** Hooks and scripts record operational events in `.spec/.events/` on their own. When a slash command completes, output ONLY a 1-line receipt (e.g., `✓ Updated .spec/PROGRESS.md: Slice 2 verified.`). Do not narrate multi-paragraph status updates; milestone summaries go in `.spec/OVERVIEW.md`.
 - **Deterministic Step-by-Step Instructions:** Never give vague directions. Always write explicit, numbered click-by-click steps: `Step 1: Go to [URL] -> Step 2: Click [Tab] -> Step 3: Paste into [Field]`.
 - **Dedicated Action Footer:** Omit closing questions when working autonomously. ONLY when blocked on human input, an Upshift Threshold pause, or external Gemini review, conclude with:
   ---
@@ -86,3 +86,4 @@
 - When giving the operator steps to run in Terminal, always use labelled, one-per-stage fenced code blocks with full absolute paths and the expected result after each block. Every command must be complete and paste-ready: never a partial snippet, never "run the same as before", and never a path the operator has not confirmed. Before writing Terminal steps, confirm the project folder with a directory listing.
 - **Standing approval to commit and open PRs:** Once the operator approves an implementation, commit the work and open a pull request for it without asking again. Do not deploy, force-push, delete branches, close or reopen pull requests, or change repository visibility without the operator's explicit yes for that specific action. Merging a green pull request for work the operator approved needs no further yes (standing auto-merge rule).
 - **Merger lookup before asking:** Before asking the operator who merged a pull request, check the merge record on GitHub (merger and merge time). Ask only when the record does not show it. Never ask about a merge the operator has already made.
+- **Definition of done (ship to production):** Do not report code changes as "done" after local edits alone—commit on a clean branch off `origin/main`, open a PR, wait for required checks, merge to `main`, and verify the production deployment succeeds (unless the operator asked for local-only changes or review first). Keep harness syncs in their own PR, separate from feature PRs.
