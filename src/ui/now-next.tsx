@@ -6,7 +6,7 @@ import { MEDIA_TYPES, TIERS, mediaItems } from "../db/schema";
 import type { MediaItem } from "../db/schema";
 import { isMediaType } from "../api/validate";
 import { Layout, loadStatusStrip } from "./layout";
-import { Field, Missing, Pill, SelectBox } from "./controls";
+import { Field, MEDIA_TYPE_ICON, Missing, Pill, SelectBox, StarRating } from "./controls";
 import { Icon } from "./icons";
 import { createLibraryRoutes } from "./library";
 import { createListsUiRoutes } from "./lists";
@@ -59,20 +59,12 @@ function StatusButton(props: { id: string; status: string; label: string; icon?:
   );
 }
 
-const RATINGS = Array.from({ length: 9 }, (_, i) => 1 + i * 0.5);
-
 function RateForm(props: { id: string; action: "complete" | "rate"; label: string; hidden?: boolean }) {
   const base = `rate-${props.id}`;
   return (
     <form class="app-stack" id={base} data-action={props.action} data-id={props.id} hidden={props.hidden}>
       <Field id={`${base}-rating`} label="Rating">
-        <SelectBox id={`${base}-rating`} name="rating" required>
-          {RATINGS.map((r) => (
-            <option value={String(r)} selected={r === 3}>
-              {r.toFixed(1)}
-            </option>
-          ))}
-        </SelectBox>
+        <StarRating id={`${base}-rating`} name="rating" value={3} label="Rating" mode="form" />
       </Field>
       <Field id={`${base}-tier`} label="Tier">
         <SelectBox id={`${base}-tier`} name="tier">
@@ -103,7 +95,7 @@ function ActiveCard(props: { item: MediaItem }) {
       <div class="app-card-body">
         <strong>{i.title}</strong>
         <div class="app-facts">
-          <Pill>{i.mediaType}</Pill>
+          <Pill icon={MEDIA_TYPE_ICON[i.mediaType]}>{i.mediaType}</Pill>
           {i.creator ? <span class="ui-muted">{i.creator}</span> : null}
         </div>
         {i.timeCommitmentDisplay ? <span class="ui-data">{i.timeCommitmentDisplay}</span> : <Missing text="Length not known yet" />}
@@ -124,7 +116,7 @@ function UpNextRow(props: { item: MediaItem }) {
   return (
     <div class="ui-card app-row">
       <div class="app-row__title">{i.title}</div>
-      <Pill>{i.mediaType}</Pill>
+      <Pill icon={MEDIA_TYPE_ICON[i.mediaType]}>{i.mediaType}</Pill>
       <span class="ui-data">{i.releaseAccessDisplay}</span>
       {i.criticScoreDisplay ? <span class="ui-data">{i.criticScoreDisplay}</span> : <Missing text="No score yet" />}
       {i.timeCommitmentDisplay ? <span class="ui-data">{i.timeCommitmentDisplay}</span> : <Missing text="Length not known yet" />}
@@ -198,7 +190,7 @@ export function createUiRoutes(options: { now?: () => Date } = {}) {
               {paused.map((i) => (
                 <div class="ui-card app-row">
                   <div class="app-row__title">{i.title}</div>
-                  <Pill>{i.mediaType}</Pill>
+                  <Pill icon={MEDIA_TYPE_ICON[i.mediaType]}>{i.mediaType}</Pill>
                   <span class="ui-data ui-muted">{`paused ${daysAgo(i.lastStatusChangeAt, now)} days ago`}</span>
                   <div class="app-actions">
                     <StatusButton id={i.id} status="Active" label="Resume" icon="play" />
@@ -269,7 +261,7 @@ export function createUiRoutes(options: { now?: () => Date } = {}) {
                 <div class="ui-card app-stack">
                   <div class="app-row">
                     <div class="app-row__title">{i.title}</div>
-                    <Pill>{i.mediaType}</Pill>
+                    <Pill icon={MEDIA_TYPE_ICON[i.mediaType]}>{i.mediaType}</Pill>
                   </div>
                   <RateForm id={i.id} action="rate" label="Save review" />
                 </div>

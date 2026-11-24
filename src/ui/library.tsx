@@ -7,7 +7,7 @@ import type { MediaItem } from "../db/schema";
 import { isMediaType, isStatus } from "../api/validate";
 import { Layout, loadStatusStrip } from "./layout";
 import { Icon } from "./icons";
-import { Field, Missing, SelectBox } from "./controls";
+import { Field, MEDIA_TYPE_ICON, Missing, STATUS_META, SelectBox, StarRating } from "./controls";
 
 export const PAGE_SIZE = 50;
 
@@ -32,8 +32,6 @@ const SORTS = {
 } as const;
 type SortKey = keyof typeof SORTS;
 const isSort = (v: unknown): v is SortKey => typeof v === "string" && Object.prototype.hasOwnProperty.call(SORTS, v);
-
-const RATINGS = Array.from({ length: 9 }, (_, i) => 1 + i * 0.5);
 
 function escapeLike(s: string): string {
   return s.replace(/[\\%_]/g, (c) => `\\${c}`);
@@ -100,16 +98,7 @@ function RatingCell(props: { i: MediaItem }) {
   const { i } = props;
   return (
     <div class="rating-cell ui-control-pair" data-id={i.id}>
-      <SelectBox label={`Rating for ${i.title}`} attrs={{ "data-action": "rating", "data-id": i.id }}>
-        <option value="" selected={i.myRating === null}>
-          -
-        </option>
-        {RATINGS.map((r) => (
-          <option value={String(r)} selected={i.myRating === r}>
-            {r.toFixed(1)}
-          </option>
-        ))}
-      </SelectBox>
+      <StarRating itemId={i.id} value={i.myRating} label={`Rating for ${i.title}`} mode="inline" />
       <SelectBox label={`Tier for ${i.title}`} attrs={{ "data-action": "tier", "data-id": i.id }}>
         <option value="" selected={i.personalTier === null}>
           -
@@ -126,47 +115,72 @@ function RatingCell(props: { i: MediaItem }) {
 
 function StatusSelect(props: { i: MediaItem }) {
   const { i } = props;
+  const opts = STATUSES.filter((s) => s !== "Archived" || i.status === "Archived");
+  const meta = STATUS_META[i.status] ?? { icon: "clock" as const, tone: "neutral" as const };
   return (
-    <SelectBox label={`Status for ${i.title}`} attrs={{ "data-action": "set-status", "data-id": i.id }}>
-      {STATUSES.filter((s) => s !== "Archived" || i.status === "Archived").map((s) => (
-        <option value={s} selected={s === i.status}>
-          {s}
-        </option>
-      ))}
-    </SelectBox>
+    <div class={`app-status-select app-status-select--${meta.tone}`}>
+      <span class="app-status-select__face" aria-hidden="true">
+        <Icon name={meta.icon} size={16} />
+        <span>{i.status}</span>
+        <Icon name="chevron-down" size={14} />
+      </span>
+      <select class="ui-select app-status-select__native" data-action="set-status" data-id={i.id} aria-label={`Status for ${i.title}`}>
+        {opts.map((s) => (
+          <option value={s} selected={s === i.status}>
+            {s}
+          </option>
+        ))}
+      </select>
+    </div>
   );
 }
 
 function TypeSelect(props: { i: MediaItem }) {
   const { i } = props;
+  const icon = MEDIA_TYPE_ICON[i.mediaType] ?? "film";
   return (
-    <SelectBox label={`Type for ${i.title}`} attrs={{ "data-action": "set-type", "data-id": i.id }}>
-      {MEDIA_TYPES.map((t) => (
-        <option value={t} selected={t === i.mediaType}>
-          {t}
-        </option>
-      ))}
-    </SelectBox>
+    <div class="app-icon-select" data-tooltip={i.mediaType}>
+      <span class="app-icon-select__face" aria-hidden="true">
+        <Icon name={icon} size={16} />
+      </span>
+      <select
+        class="ui-select app-icon-select__native"
+        data-action="set-type"
+        data-id={i.id}
+        aria-label={`Type for ${i.title}: ${i.mediaType}`}
+        title={i.mediaType}
+      >
+        {MEDIA_TYPES.map((t) => (
+          <option value={t} selected={t === i.mediaType}>
+            {t}
+          </option>
+        ))}
+      </select>
+    </div>
   );
 }
 
 function TitleInput(props: { i: MediaItem }) {
   const { i } = props;
-  return <input class="ui-input" type="text" data-action="title" data-id={i.id} value={i.title} maxlength={300} aria-label={`Title of ${i.title}`} />;
+  return (
+    <span class="app-title-wrap" data-tooltip={i.title}>
+      <input class="ui-input app-title-input" type="text" data-action="title" data-id={i.id} value={i.title} maxlength={300} aria-label={`Title of ${i.title}`} />
+    </span>
+  );
 }
 
 function LibraryRow(props: { i: MediaItem }) {
   const { i } = props;
   return (
     <tr>
+      <td class="app-col-type">
+        <TypeSelect i={i} />
+      </td>
       <td>
         <TitleInput i={i} />
       </td>
       <td>
         <StatusSelect i={i} />
-      </td>
-      <td>
-        <TypeSelect i={i} />
       </td>
       <td>{i.releaseYear ?? <Missing />}</td>
       <td>{i.creator || <Missing />}</td>
@@ -179,9 +193,9 @@ function LibraryRow(props: { i: MediaItem }) {
       <td>
         <input class="ui-input" type="text" data-action="notes" data-id={i.id} value={i.personalNotes} maxlength={10000} aria-label={`Notes for ${i.title}`} />
       </td>
-      <td>
-        <button type="button" class="ui-btn ui-btn--ghost" data-action="archive" data-id={i.id} aria-label={`Archive ${i.title}`}>
-          Archive
+      <td class="app-col-sticky-right">
+        <button type="button" class="ui-icon-btn" data-action="archive" data-id={i.id} aria-label={`Archive ${i.title}`} title={`Archive ${i.title}`}>
+          <Icon name="archive" />
         </button>
       </td>
     </tr>
@@ -193,11 +207,11 @@ function ArchiveRow(props: { i: MediaItem }) {
   const review = i.reviewText.length > 80 ? i.reviewText.slice(0, 80) + "…" : i.reviewText;
   return (
     <tr>
-      <td>
-        <TitleInput i={i} />
+      <td class="app-col-type">
+        <TypeSelect i={i} />
       </td>
       <td>
-        <TypeSelect i={i} />
+        <TitleInput i={i} />
       </td>
       <td>{i.consumedYear ?? <Missing />}</td>
       <td>{i.completedAt ? i.completedAt.slice(0, 10) : <Missing text="No date yet" />}</td>
@@ -338,8 +352,8 @@ export function createLibraryRoutes(options: { now?: () => Date } = {}) {
               <thead>
                 {archive ? (
                   <tr>
+                    <th class="app-col-type">Type</th>
                     {th("title", "Title")}
-                    <th>Type</th>
                     {th("consumed_year", "Consumed")}
                     {th("completed_at", "Completed")}
                     {th("my_rating", "Rating / Tier")}
@@ -347,9 +361,9 @@ export function createLibraryRoutes(options: { now?: () => Date } = {}) {
                   </tr>
                 ) : (
                   <tr>
+                    <th class="app-col-type">Type</th>
                     {th("title", "Title")}
                     {th("status", "Status")}
-                    <th>Type</th>
                     {th("release_year", "Year")}
                     <th>Creator</th>
                     {th("my_rating", "Rating / Tier")}
@@ -357,7 +371,7 @@ export function createLibraryRoutes(options: { now?: () => Date } = {}) {
                     <th>Time</th>
                     <th>Access</th>
                     <th>Notes</th>
-<th>Actions</th>
+                    <th class="app-col-sticky-right"><span class="sr-only">Actions</span></th>
                   </tr>
                 )}
               </thead>

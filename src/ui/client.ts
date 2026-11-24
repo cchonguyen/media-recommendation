@@ -5,6 +5,8 @@ export const CLIENT_SCRIPT = `
   var ICON_ALERT = SVG_OPEN + '<circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="8" y2="12"/><line x1="12" x2="12.01" y1="16" y2="16"/></svg>';
   var ICON_INFO = SVG_OPEN + '<circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>';
   var ICON_CHECK = SVG_OPEN + '<path d="M20 6 9 17l-5-5"/></svg>';
+  var STAR_PATH = '<polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>';
+  var STAR_HALF_PATH = '<path class="app-star__half-fill" d="M12 2L8.91 8.26 2 9.27l5 4.87-1.18 6.88L12 17.77Z"/>' + STAR_PATH;
   function mk(tag, cls, text) {
     var n = document.createElement(tag);
     if (cls) n.className = cls;
@@ -270,6 +272,39 @@ export const CLIENT_SCRIPT = `
       confirmDialog({ title: "Archive this item?", body: "It is hidden from the library. Its history is kept.", confirmLabel: "Archive item", danger: false }).then(function (ok) {
         if (ok) done(call("DELETE", "/api/items/" + encodeURIComponent(id)), el);
       });
+    } else if (a === "star-rate") {
+      var n = Number(el.getAttribute("data-star"));
+      var wrap = el.closest(".app-stars");
+      if (!wrap || !n) return;
+      var cur = Number(wrap.getAttribute("data-rating-value") || "0");
+      var val;
+      if (ev.detail > 0) {
+        var rect = el.getBoundingClientRect();
+        var isLeft = (ev.clientX - rect.left) < rect.width / 2;
+        val = (isLeft && n > 1) ? n - 0.5 : n;
+      } else {
+        val = (cur === n && n > 1) ? n - 0.5 : n;
+      }
+      wrap.setAttribute("data-rating-value", String(val));
+      var hidden = wrap.querySelector("input[type=hidden]");
+      if (hidden) hidden.value = String(val);
+      Array.prototype.forEach.call(wrap.querySelectorAll(".app-star"), function (btn) {
+        var k = Number(btn.getAttribute("data-star"));
+        var st = val >= k ? "full" : val >= k - 0.5 ? "half" : "empty";
+        btn.className = st === "empty" ? "ui-icon-btn app-star" : "ui-icon-btn app-star app-star--" + st;
+        btn.setAttribute("aria-pressed", st !== "empty" ? "true" : "false");
+        btn.setAttribute("title", val.toFixed(1) + " / 5 — click to rate " + k);
+        var svg = btn.querySelector("svg");
+        if (svg) svg.innerHTML = st === "half" ? STAR_HALF_PATH : STAR_PATH;
+      });
+      if (wrap.getAttribute("data-stars-mode") === "inline" && id) {
+        var cell = wrap.closest(".rating-cell");
+        var trEl = cell ? cell.querySelector("[data-action=tier]") : null;
+        var tr = trEl ? trEl.value : "";
+        var rbody = { rating: val };
+        if (tr) rbody.tier = tr;
+        cellDone(call("POST", itemUrl(id) + "/rating", rbody), el);
+      }
     }
   });
   function cellDone(p, el) {
@@ -292,6 +327,10 @@ export const CLIENT_SCRIPT = `
     } else if (a === "title") {
       var t = el.value.trim();
       if (!t) { toast("Title must not be empty."); location.reload(); return; }
+      el.setAttribute("aria-label", "Title of " + t);
+      if (el.parentElement && el.parentElement.classList.contains("app-title-wrap")) {
+        el.parentElement.setAttribute("data-tooltip", t);
+      }
       cellDone(call("PATCH", itemUrl(id), { title: t }), el);
     } else if (a === "notes") {
       cellDone(call("PATCH", itemUrl(id), { personal_notes: el.value }), el);

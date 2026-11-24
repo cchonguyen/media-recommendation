@@ -312,6 +312,38 @@ describe("design system guards", () => {
     expect(STYLES).not.toContain(".app-table .rating-cell");
   });
 
+  it("Library and Now & Next use compact Type column 1, wide Title with tooltip, sticky icon Archive, star ratings, and icon+text Status", async () => {
+    const all = await pages();
+    const now = all.find(([p]) => p === "/")![1];
+    const lib = all.find(([p]) => p === "/library/movies")![1];
+    const arch = all.find(([p]) => p === "/library/completed")![1];
+
+    // Type column is first in both Library and Archive tables and uses icon picker
+    expect(lib).toMatch(/<thead>\s*<tr>\s*<th class="app-col-type">Type<\/th>/);
+    expect(arch).toMatch(/<thead>\s*<tr>\s*<th class="app-col-type">Type<\/th>/);
+    expect(lib).toContain('class="app-icon-select" data-tooltip="Movie"');
+    expect(arch).toContain('class="app-icon-select" data-tooltip="Book"');
+
+    // Title input is twice as wide (20rem) and has full-name tooltip wrapper
+    expect(STYLES).toContain(".app-table .app-title-input{min-width:20rem}");
+    expect(lib).toContain('class="app-title-wrap" data-tooltip="Alpha Movie"');
+    expect(lib).toContain('class="ui-input app-title-input"');
+
+    // Archive button is icon-only inside sticky right column
+    expect(STYLES).toContain("position:sticky;right:0");
+    expect(lib).toContain('<td class="app-col-sticky-right"><button type="button" class="ui-icon-btn" data-action="archive"');
+
+    // Ratings use star buttons instead of numeric select dropdowns
+    expect(lib).toContain('class="app-stars"');
+    expect(lib).toContain('data-action="star-rate"');
+    expect(arch).toContain('class="app-stars"');
+    expect(now).toContain('class="app-stars"');
+
+    // Status uses icon + text wrapper with tone class
+    expect(lib).toContain('class="app-status-select app-status-select--neutral"');
+    expect(lib).toContain('class="app-status-select__face"');
+  });
+
   it("STYLES carries the azure accent and Newsreader, and no legacy block", () => {
     expect(STYLES).toContain('[data-accent="azure"]');
     expect(STYLES).toContain("Newsreader");
