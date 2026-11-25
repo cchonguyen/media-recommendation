@@ -35,6 +35,7 @@ interface SearchHit {
   original_name?: string;
   release_date?: string;
   first_air_date?: string;
+  popularity?: number;
 }
 
 interface ReleaseDateEntry {
@@ -87,15 +88,22 @@ function hitDate(h: SearchHit): string {
 }
 
 /**
- * Prefers exact title matches, then the most recent release. When a year hint exists the search is
- * already filtered by year, so the same rule just orders what is left.
+ * Prefers exact title matches, then highest TMDB popularity (when present), then most recent release.
+ * When a year hint exists the search is already filtered by year, so the same rule orders what is left.
  */
 export function pickSearchHit(hits: SearchHit[], title: string): SearchHit | undefined {
   if (hits.length === 0) return undefined;
   const t = norm(title);
   const exact = hits.filter((h) => [h.title, h.original_title, h.name, h.original_name].some((n) => norm(n) === t));
   const pool = exact.length > 0 ? exact : hits;
-  return [...pool].sort((a, b) => hitDate(b).localeCompare(hitDate(a)))[0];
+  const hasPopularity = pool.some((h) => typeof h.popularity === "number");
+  return [...pool].sort((a, b) => {
+    if (hasPopularity) {
+      const popDiff = (b.popularity ?? 0) - (a.popularity ?? 0);
+      if (popDiff !== 0) return popDiff;
+    }
+    return hitDate(b).localeCompare(hitDate(a));
+  })[0];
 }
 
 const dateOnly = (iso: string) => iso.slice(0, 10);
