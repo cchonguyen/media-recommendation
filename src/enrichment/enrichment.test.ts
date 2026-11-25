@@ -124,6 +124,15 @@ describe("tmdb adapter", () => {
     expect(pickSearchHit(hits, "dune")!.id).toBe(2);
     expect(pickSearchHit(hits, "Nope")!.id).toBe(3);
     expect(pickSearchHit([], "x")).toBeUndefined();
+    expect(
+      pickSearchHit(
+        [
+          { id: 10, title: "Look Back", release_date: "2026-09-11", popularity: 12.5 },
+          { id: 11, title: "Look Back", release_date: "2026-10-01", popularity: 0.2 },
+        ],
+        "Look Back",
+      )!.id,
+    ).toBe(10);
 
     const f = routedFetch({
       [`${TMDB}/search/movie`]: movieSearch(hits[0]!),
