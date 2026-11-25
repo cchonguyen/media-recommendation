@@ -4,7 +4,7 @@ import { mediaItems, systemKv } from "../db/schema";
 import { createSubrequestBudget } from "../google/api";
 import { seed, setup } from "../intake/test-fixtures";
 import { jsonResponse } from "../google/test-helpers";
-import { booksEnricher, amazonLink, extractAuthorHint } from "./books";
+import { booksEnricher, amazonLink, extractAuthorHint, mapBookRating } from "./books";
 import { igdbEnricher, TWITCH_TOKEN_CACHE_KEY, formatHours, pickGame } from "./igdb";
 import { itunesEnricher } from "./itunes";
 import { findUrl, oneOffEnricher, parseOpenGraph, safeHttpUrl } from "./oneoff";
@@ -157,6 +157,8 @@ const olDoc = (over: Record<string, unknown> = {}) => ({
   number_of_pages_median: 476,
   subject: ["Fiction", "nyt:bestseller=2021", "Science fiction"],
   cover_i: 12345,
+  ratings_average: 4.5369,
+  ratings_count: 203,
   ...over,
 });
 const volume = (over: Record<string, unknown> = {}) => ({
@@ -171,6 +173,8 @@ const volume = (over: Record<string, unknown> = {}) => ({
       { type: "ISBN_13", identifier: "9780593135204" },
     ],
     imageLinks: { thumbnail: "http://books.google.com/cover.jpg" },
+    averageRating: 4.5,
+    ratingsCount: 120,
     ...over,
   },
 });
@@ -191,6 +195,8 @@ describe("books", () => {
         releaseState: "Published",
         releaseAccessDisplay: "Published",
         isAvailableNow: true,
+        criticScore: 90,
+        criticScoreDisplay: "GB 4.5/5",
         genresJson: '["Fiction"]',
         timeCommitmentDisplay: "476 pages",
         timeCommitmentMinutes: 952,
@@ -216,6 +222,8 @@ describe("books", () => {
         releaseState: "Published",
         releaseAccessDisplay: "Published",
         isAvailableNow: true,
+        criticScore: 90.7,
+        criticScoreDisplay: "OL 4.5/5",
         genresJson: '["Fiction","Science fiction"]',
         timeCommitmentDisplay: "476 pages",
         timeCommitmentMinutes: 952,
@@ -289,6 +297,12 @@ describe("books", () => {
     );
     expect(r).toMatchObject({ kind: "ok", fields: { creator: "Jeff VanderMeer" } });
     expect(calls).toBe(2);
+  });
+
+  it("maps empty critic score when rating or count is missing or zero", () => {
+    expect(mapBookRating(undefined, 10, "OL")).toEqual({ criticScore: null, criticScoreDisplay: "" });
+    expect(mapBookRating(4.5, 0, "OL")).toEqual({ criticScore: null, criticScoreDisplay: "" });
+    expect(mapBookRating(4.5, undefined, "GB")).toEqual({ criticScore: null, criticScoreDisplay: "" });
   });
 });
 

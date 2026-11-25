@@ -2,7 +2,7 @@ import type { EnrichContext, EnrichOutcome, EnrichedFields, Enricher } from "./t
 
 const GOOGLE_API = "https://www.googleapis.com/books/v1/volumes";
 const OPEN_LIBRARY_API = "https://openlibrary.org/search.json";
-const OPEN_LIBRARY_FIELDS = "title,author_name,first_publish_year,isbn,number_of_pages_median,subject,cover_i";
+const OPEN_LIBRARY_FIELDS = "title,author_name,first_publish_year,isbn,number_of_pages_median,subject,cover_i,ratings_average,ratings_count";
 
 interface Volume {
   volumeInfo?: {
@@ -13,6 +13,8 @@ interface Volume {
     categories?: string[];
     industryIdentifiers?: { type: string; identifier: string }[];
     imageLinks?: { thumbnail?: string; smallThumbnail?: string };
+    averageRating?: number;
+    ratingsCount?: number;
   };
 }
 
@@ -24,6 +26,8 @@ interface OpenLibraryDoc {
   number_of_pages_median?: number;
   subject?: string[];
   cover_i?: number;
+  ratings_average?: number;
+  ratings_count?: number;
 }
 
 const norm = (s: string | undefined) => (s ?? "").trim().toLowerCase();
@@ -79,6 +83,20 @@ function availabilityFields(upcoming: boolean, fullDate: string | null, releaseY
   };
 }
 
+export function mapBookRating(
+  avg: number | undefined,
+  count: number | undefined,
+  source: "OL" | "GB",
+): Pick<EnrichedFields, "criticScore" | "criticScoreDisplay"> {
+  if (typeof avg === "number" && avg > 0 && (count ?? 0) >= 1) {
+    return {
+      criticScore: Math.round(avg * 200) / 10,
+      criticScoreDisplay: `${source} ${avg.toFixed(1)}/5`,
+    };
+  }
+  return { criticScore: null, criticScoreDisplay: "" };
+}
+
 function mapVolume(v: Volume, ctx: EnrichContext): EnrichOutcome {
   const info = v.volumeInfo;
   if (!info) return { kind: "not-found" };
@@ -98,6 +116,7 @@ function mapVolume(v: Volume, ctx: EnrichContext): EnrichOutcome {
       releaseYear,
       releaseDate: fullDate,
       ...availabilityFields(upcoming, fullDate, releaseYear),
+      ...mapBookRating(info.averageRating, info.ratingsCount, "GB"),
       genresJson: JSON.stringify(info.categories ?? []),
       timeCommitmentDisplay: pages ? `${pages} pages` : "",
       timeCommitmentMinutes: pages ? pages * 2 : null,
@@ -149,6 +168,7 @@ async function fetchOpenLibrary(ctx: EnrichContext, authorHint: string | null): 
       releaseYear,
       releaseDate: null,
       ...availabilityFields(upcoming, null, releaseYear),
+      ...mapBookRating(doc.ratings_average, doc.ratings_count, "OL"),
       genresJson: JSON.stringify(subjects),
       timeCommitmentDisplay: pages ? `${pages} pages` : "",
       timeCommitmentMinutes: pages ? pages * 2 : null,
@@ -162,7 +182,7 @@ export const booksEnricher: Enricher = {
   subrequestsNeeded: (env) => (env.GOOGLE_BOOKS_API_KEY ? 3 : 2),
   hasCredentials: () => true,
   async enrich(ctx: EnrichContext): Promise<EnrichOutcome> {
-    const { author: authorHint } = extractAuthorHint(ctx.row.personalNotes);
+    const authorHint = extractAuthorHint(ctx.row.personalNotes).author ?? (ctx.row.creator?.trim() || null);
     if (!ctx.env.GOOGLE_BOOKS_API_KEY) {
       return fetchOpenLibrary(ctx, authorHint);
     }
