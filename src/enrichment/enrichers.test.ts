@@ -4,7 +4,7 @@ import { mediaItems, systemKv } from "../db/schema";
 import { createSubrequestBudget } from "../google/api";
 import { seed, setup } from "../intake/test-fixtures";
 import { jsonResponse } from "../google/test-helpers";
-import { booksEnricher, amazonLink } from "./books";
+import { booksEnricher, amazonLink, extractAuthorHint } from "./books";
 import { igdbEnricher, TWITCH_TOKEN_CACHE_KEY, formatHours, pickGame } from "./igdb";
 import { itunesEnricher } from "./itunes";
 import { findUrl, oneOffEnricher, parseOpenGraph, safeHttpUrl } from "./oneoff";
@@ -254,6 +254,42 @@ describe("books", () => {
     expect((err as Error).message).not.toContain("bk-SECRET");
     expect(booksEnricher.hasCredentials({})).toBe(true);
   });
+
+  it("extracts author hints and strips leading by-author prefixes cleanly", () => {
+    expect(extractAuthorHint("by Andy Weir")).toEqual({ author: "Andy Weir", remainingNotes: "" });
+    expect(extractAuthorHint("by Eli J. Finkel")).toEqual({ author: "Eli J. Finkel", remainingNotes: "" });
+    expect(extractAuthorHint("by Dr. Jenny Wang")).toEqual({ author: "Jenny Wang", remainingNotes: "" });
+    expect(extractAuthorHint("by Ken Liu (Ed.)")).toEqual({ author: "Ken Liu", remainingNotes: "" });
+    expect(extractAuthorHint("By Ocean Vuong; gay Asian literary fiction")).toEqual({
+      author: "Ocean Vuong",
+      remainingNotes: "gay Asian literary fiction",
+    });
+    expect(extractAuthorHint("Great sci-fi recommendation")).toEqual({
+      author: null,
+      remainingNotes: "Great sci-fi recommendation",
+    });
+  });
+
+  it("passes author hint to Open Library, deduplicates authors, and falls back to main title before colon", async () => {
+    const { db } = setup();
+    let calls = 0;
+    const f = routedFetch({
+      [OPEN_LIBRARY]: (u: URL) => {
+        calls++;
+        if (calls === 1) {
+          expect(u.searchParams.get("author")).toBe("Jeff VanderMeer");
+          return jsonResponse({ docs: [] });
+        }
+        expect(u.searchParams.get("title")).toBe("The Southern Reach Trilogy");
+        return jsonResponse({ docs: [olDoc({ title: "The Southern Reach Trilogy", author_name: ["Jeff VanderMeer", "Jeff VanderMeer"] })] });
+      },
+    });
+    const r = await booksEnricher.enrich(
+      ctx(db, f, row({ title: "The Southern Reach Trilogy: Annihilation", personalNotes: "by Jeff VanderMeer" })),
+    );
+    expect(r).toMatchObject({ kind: "ok", fields: { creator: "Jeff VanderMeer" } });
+    expect(calls).toBe(2);
+  });
 });
 
 describe("itunes", () => {
@@ -422,6 +458,37 @@ describe("queue with all enrichers", () => {
     expect(r.enrichmentAttempts).toBe(1);
     expect(r.enrichmentError).toContain("[redacted]");
     expect(r.enrichmentError).not.toContain(TW_SECRET);
+  });
+
+  it("strips redundant leading author from Book personalNotes on enrichment", async () => {
+    const { db } = setup();
+    await seed(db, {
+      id: "b1",
+      title: "On Earth We're Briefly Gorgeous",
+      mediaType: "Book",
+      personalNotes: "By Ocean Vuong; gay Asian literary fiction",
+    });
+    await seed(db, {
+      id: "b2",
+      title: "Project Hail Mary",
+      mediaType: "Book",
+      personalNotes: "by Andy Weir",
+    });
+    const ff = routedFetch({
+      [OPEN_LIBRARY]: (u: URL) =>
+        jsonResponse({
+          docs: [
+            olDoc({
+              title: u.searchParams.get("title") ?? "",
+              author_name: [u.searchParams.get("author") ?? "Author"],
+              isbn: [u.searchParams.get("title") === "Project Hail Mary" ? "9780593135204" : "9780525562023"],
+            }),
+          ],
+        }),
+    });
+    await runEnrichmentQueue({ db, env: {}, fetchImpl: ff.fetchImpl, now: () => NOW });
+    expect(await get(db, "b1")).toMatchObject({ creator: "Ocean Vuong", personalNotes: "gay Asian literary fiction" });
+    expect(await get(db, "b2")).toMatchObject({ creator: "Andy Weir", personalNotes: "" });
   });
 });
 

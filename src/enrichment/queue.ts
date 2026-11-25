@@ -9,7 +9,7 @@ import type { BatchItem, WorkingRow } from "./merge";
 import { fetchOmdbRatings } from "./omdb";
 import { fetchTmdbMetadata } from "./tmdb";
 import { igdbEnricher } from "./igdb";
-import { booksEnricher } from "./books";
+import { booksEnricher, extractAuthorHint } from "./books";
 import { itunesEnricher } from "./itunes";
 import { oneOffEnricher } from "./oneoff";
 import { ENRICH_COLUMNS } from "./types";
@@ -116,6 +116,7 @@ export async function runEnrichmentQueue(deps: EnrichmentDeps): Promise<Enrichme
 
   const stmts: BatchItem[] = [];
   const working = new Map<string, WorkingRow>();
+  const notesCleaned = new Set<string>();
   const deleted = new Set<string>();
   const failures: { row: MediaItem; message: string }[] = [];
 
@@ -148,6 +149,13 @@ export async function runEnrichmentQueue(deps: EnrichmentDeps): Promise<Enrichme
       lastEnrichedAt: nowIso,
       updatedAt: nowIso,
     };
+    if (row.mediaType === "Book" && outcome.fields.creator) {
+      const hint = extractAuthorHint(row.personalNotes);
+      if (hint.author) {
+        enrichedRow.personalNotes = hint.remainingNotes;
+        notesCleaned.add(row.id);
+      }
+    }
     enrichedRow.priorityScore = priorityForRow(enrichedRow, now);
     working.set(row.id, { row: enrichedRow, enriched: true, merged: false });
     summary.enriched++;
@@ -162,6 +170,7 @@ export async function runEnrichmentQueue(deps: EnrichmentDeps): Promise<Enrichme
     const set = {
       ...pickColumns(w.row, ENRICH_COLUMNS),
       ...(w.merged ? pickColumns(w.row, MERGE_COLUMNS) : {}),
+      ...(notesCleaned.has(w.row.id) ? { personalNotes: w.row.personalNotes } : {}),
       enrichmentAttempts: w.row.enrichmentAttempts,
       priorityScore: w.row.priorityScore,
       updatedAt: nowIso,

@@ -57,6 +57,20 @@ export function amazonLink(isbn13: string | null, title: string): string {
   return `https://www.amazon.com/s?k=${isbn13 || encodeURIComponent(title)}`;
 }
 
+/**
+ * Extracts a leading "by <Author>" prefix from personalNotes (up to `;` or end of line)
+ * so it can serve as a search hint and be stripped once enrichment populates `creator`.
+ */
+export function extractAuthorHint(personalNotes: string | undefined): { author: string | null; remainingNotes: string } {
+  const raw = (personalNotes ?? "").trim();
+  if (!raw) return { author: null, remainingNotes: "" };
+  const m = /^by\s+([^;\n]+?)(?:\s*\(ed\.?\))?(?:\s*;\s*(.*)|\s*$)/i.exec(raw);
+  if (!m) return { author: null, remainingNotes: raw };
+  const author = m[1]!.replace(/^dr\.\s+/i, "").trim();
+  const remainingNotes = (m[2] ?? "").trim();
+  return { author: author || null, remainingNotes };
+}
+
 function availabilityFields(upcoming: boolean, fullDate: string | null, releaseYear: number | null): Pick<EnrichedFields, "releaseState" | "releaseAccessDisplay" | "isAvailableNow"> {
   return {
     releaseState: upcoming ? "Upcoming" : "Published",
@@ -80,7 +94,7 @@ function mapVolume(v: Volume, ctx: EnrichContext): EnrichOutcome {
     kind: "ok",
     fields: {
       isbn13,
-      creator: (info.authors ?? []).join(", "),
+      creator: [...new Set(info.authors ?? [])].join(", "),
       releaseYear,
       releaseDate: fullDate,
       ...availabilityFields(upcoming, fullDate, releaseYear),
@@ -93,16 +107,32 @@ function mapVolume(v: Volume, ctx: EnrichContext): EnrichOutcome {
   };
 }
 
-async function fetchOpenLibrary(ctx: EnrichContext): Promise<EnrichOutcome> {
+async function queryOpenLibrary(title: string, author: string | null, ctx: EnrichContext): Promise<OpenLibraryDoc[]> {
   const url = new URL(OPEN_LIBRARY_API);
-  url.searchParams.set("title", ctx.row.title);
+  url.searchParams.set("title", title);
+  if (author) url.searchParams.set("author", author);
   url.searchParams.set("limit", "5");
   url.searchParams.set("fields", OPEN_LIBRARY_FIELDS);
   ctx.budget?.take();
   const res = await (ctx.fetchImpl ?? fetch)(url.href);
   if (!res.ok) throw new Error(`Open Library returned HTTP ${res.status}`);
   const body = (await res.json()) as { docs?: OpenLibraryDoc[] };
-  const doc = pickOpenLibraryDoc(body.docs ?? [], ctx.row.title, ctx.row.yearHint);
+  return body.docs ?? [];
+}
+
+async function fetchOpenLibrary(ctx: EnrichContext, authorHint: string | null): Promise<EnrichOutcome> {
+  let docs = await queryOpenLibrary(ctx.row.title, authorHint, ctx);
+  let matchTitle = ctx.row.title;
+  if (docs.length === 0) {
+    const colonIdx = ctx.row.title.indexOf(":");
+    if (colonIdx > 0) {
+      matchTitle = ctx.row.title.slice(0, colonIdx).trim();
+      docs = await queryOpenLibrary(matchTitle, authorHint, ctx);
+    } else if (authorHint) {
+      docs = await queryOpenLibrary(ctx.row.title, null, ctx);
+    }
+  }
+  const doc = pickOpenLibraryDoc(docs, matchTitle, ctx.row.yearHint);
   if (!doc) return { kind: "not-found" };
 
   const releaseYear = doc.first_publish_year ?? null;
@@ -115,7 +145,7 @@ async function fetchOpenLibrary(ctx: EnrichContext): Promise<EnrichOutcome> {
     kind: "ok",
     fields: {
       isbn13,
-      creator: (doc.author_name ?? []).join(", "),
+      creator: [...new Set(doc.author_name ?? [])].join(", "),
       releaseYear,
       releaseDate: null,
       ...availabilityFields(upcoming, null, releaseYear),
@@ -129,21 +159,24 @@ async function fetchOpenLibrary(ctx: EnrichContext): Promise<EnrichOutcome> {
 }
 
 export const booksEnricher: Enricher = {
-  subrequestsNeeded: (env) => (env.GOOGLE_BOOKS_API_KEY ? 2 : 1),
+  subrequestsNeeded: (env) => (env.GOOGLE_BOOKS_API_KEY ? 3 : 2),
   hasCredentials: () => true,
   async enrich(ctx: EnrichContext): Promise<EnrichOutcome> {
+    const { author: authorHint } = extractAuthorHint(ctx.row.personalNotes);
     if (!ctx.env.GOOGLE_BOOKS_API_KEY) {
-      return fetchOpenLibrary(ctx);
+      return fetchOpenLibrary(ctx, authorHint);
     }
     const url = new URL(GOOGLE_API);
-    url.searchParams.set("q", `intitle:"${ctx.row.title.replace(/"/g, " ").trim()}"`);
+    const cleanTitle = ctx.row.title.replace(/"/g, " ").trim();
+    const q = authorHint ? `intitle:"${cleanTitle}" inauthor:"${authorHint.replace(/"/g, " ").trim()}"` : `intitle:"${cleanTitle}"`;
+    url.searchParams.set("q", q);
     url.searchParams.set("maxResults", "5");
     url.searchParams.set("printType", "books");
     url.searchParams.set("key", ctx.env.GOOGLE_BOOKS_API_KEY);
     ctx.budget?.take();
     const res = await (ctx.fetchImpl ?? fetch)(url.href);
     if (res.status === 429 || res.status >= 500) {
-      return fetchOpenLibrary(ctx);
+      return fetchOpenLibrary(ctx, authorHint);
     }
     // The message omits the URL: it can carry the key.
     if (!res.ok) throw new Error(`Google Books returned HTTP ${res.status}`);
