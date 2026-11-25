@@ -6,7 +6,7 @@ import { MEDIA_TYPES, TIERS, mediaItems } from "../db/schema";
 import type { MediaItem } from "../db/schema";
 import { isMediaType } from "../api/validate";
 import { Layout, loadStatusStrip } from "./layout";
-import { Field, IconMenu, MEDIA_TYPE_ICON, Missing, Pill, StarRating } from "./controls";
+import { CriticScore, Field, IconMenu, MEDIA_TYPE_ICON, Missing, Pill, StarRating } from "./controls";
 import { Icon } from "./icons";
 import { createLibraryRoutes } from "./library";
 import { createListsUiRoutes } from "./lists";
@@ -122,7 +122,7 @@ function UpNextRow(props: { item: MediaItem }) {
       <div class="app-row__title">{i.title}</div>
       <Pill icon={MEDIA_TYPE_ICON[i.mediaType]}>{i.mediaType}</Pill>
       <span class="ui-data">{i.releaseAccessDisplay}</span>
-      {i.criticScoreDisplay ? <span class="ui-data">{i.criticScoreDisplay}</span> : <Missing text="No score yet" />}
+      <CriticScore value={i.criticScoreDisplay} missingText="No score yet" />
       {i.timeCommitmentDisplay ? <span class="ui-data">{i.timeCommitmentDisplay}</span> : <Missing text="Length not known yet" />}
       <span class="ui-data">{`Score ${i.priorityScore.toFixed(1)}`}</span>
       <div class="app-actions">

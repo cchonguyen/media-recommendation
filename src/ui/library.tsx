@@ -7,7 +7,7 @@ import type { MediaItem } from "../db/schema";
 import { isMediaType, isStatus, isTier } from "../api/validate";
 import { Layout, loadStatusStrip } from "./layout";
 import { Icon } from "./icons";
-import { IconMenu, MEDIA_TYPE_ICON, Missing, STATUS_META, StarRating } from "./controls";
+import { CriticScore, IconMenu, MEDIA_TYPE_ICON, Missing, STATUS_META, StarRating } from "./controls";
 
 export const PAGE_SIZE = 50;
 
@@ -212,7 +212,7 @@ function LibraryRow(props: { i: MediaItem }) {
       <td>
         <RatingCell i={i} />
       </td>
-      <td>{i.criticScoreDisplay || <Missing />}</td>
+      <td><CriticScore value={i.criticScoreDisplay} /></td>
       <td>{i.timeCommitmentDisplay || <Missing />}</td>
       <td>{i.releaseAccessDisplay}</td>
       <td>

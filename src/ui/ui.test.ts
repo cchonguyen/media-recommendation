@@ -6,6 +6,7 @@ import { createUiRoutes } from "./now-next";
 import { setCachedValue } from "../google/token";
 import { CLIENT_SCRIPT } from "./client";
 import { STYLES } from "./styles";
+import { parseCriticScore } from "./controls";
 import { readFileSync } from "node:fs";
 
 const NOW = new Date("2026-07-10T12:00:00Z");
@@ -390,5 +391,23 @@ describe("design system guards", () => {
     expect(STYLES).toContain('[data-accent="azure"]');
     expect(STYLES).toContain("Newsreader");
     expect(STYLES).not.toContain("LEGACY");
+  });
+
+  it("formats critic scores with bold value, spaced denominator, and quieter right-side source", async () => {
+    expect(parseCriticScore("TMDB 7.8")).toEqual([{ val: "7.8", denom: " / 10", source: "TMDB" }]);
+    expect(parseCriticScore("OL 4.5/5")).toEqual([{ val: "4.5", denom: " / 5", source: "OL" }]);
+    expect(parseCriticScore("IGDB 90")).toEqual([{ val: "90", denom: " / 100", source: "IGDB" }]);
+    expect(parseCriticScore("RT 83% · MC 74")).toEqual([
+      { val: "83", denom: "%", source: "RT" },
+      { val: "74", denom: " / 100", source: "MC" },
+    ]);
+
+    const h = harness();
+    await seed(h.db, { id: "m1", title: "Dune", mediaType: "Movie", status: "Up Next", criticScoreDisplay: "TMDB 7.8" });
+    await seed(h.db, { id: "b1", title: "Piranesi", mediaType: "Book", status: "Backlog", criticScoreDisplay: "OL 4.5/5" });
+    const nowHtml = await (await h.get("/")).text();
+    const libHtml = await (await h.get("/library/books")).text();
+    expect(nowHtml).toContain('<strong class="app-score__val">7.8</strong><span class="app-score__denom"> / 10</span></span><span class="app-score__src">TMDB</span>');
+    expect(libHtml).toContain('<strong class="app-score__val">4.5</strong><span class="app-score__denom"> / 5</span></span><span class="app-score__src">OL</span>');
   });
 });

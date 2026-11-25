@@ -181,3 +181,52 @@ export function StarRating(props: {
     </div>
   );
 }
+
+export interface ParsedCriticScore {
+  val: string;
+  denom: string;
+  source: string;
+}
+
+export function parseCriticScore(display: string): ParsedCriticScore[] {
+  const parts = display
+    .trim()
+    .split(/\s*·\s*/)
+    .filter(Boolean);
+  return parts.map((part) => {
+    let m = /^(TMDB|IMDb)\s+(\d+(?:\.\d+)?)$/i.exec(part);
+    if (m) return { val: m[2]!, denom: " / 10", source: m[1]! };
+    m = /^(OL|GB)\s+(\d+(?:\.\d+)?)\/(\d+)$/i.exec(part);
+    if (m) return { val: m[2]!, denom: ` / ${m[3]!}`, source: m[1]! };
+    m = /^(IGDB|MC)\s+(\d+(?:\.\d+)?)$/i.exec(part);
+    if (m) return { val: m[2]!, denom: " / 100", source: m[1]! };
+    m = /^(RT)\s+(\d+(?:\.\d+)?)%$/i.exec(part);
+    if (m) return { val: m[2]!, denom: "%", source: m[1]! };
+    return { val: part, denom: "", source: "" };
+  });
+}
+
+export function CriticScore(props: { value: string; missingText?: string }) {
+  const scores = parseCriticScore(props.value);
+  if (scores.length === 0) return <Missing text={props.missingText} />;
+  return (
+    <span class="app-scores">
+      {scores.map((s, idx) => (
+        <>
+          {idx > 0 ? (
+            <span class="app-score__sep" aria-hidden="true">
+              ·
+            </span>
+          ) : null}
+          <span class="app-score">
+            <span class="app-score__num">
+              <strong class="app-score__val">{s.val}</strong>
+              {s.denom ? <span class="app-score__denom">{s.denom}</span> : null}
+            </span>
+            {s.source ? <span class="app-score__src">{s.source}</span> : null}
+          </span>
+        </>
+      ))}
+    </span>
+  );
+}
